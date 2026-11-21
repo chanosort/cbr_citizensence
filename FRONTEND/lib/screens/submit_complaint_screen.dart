@@ -463,35 +463,88 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             validator: (v) => v == null ? 'Select the office that should receive this.' : null,
           ),
           space,
-          const Text('Photo or document (optional)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-          const SizedBox(height: 8),
+          Row(children: [
+            const Icon(Icons.add_a_photo_outlined, size: 18, color: AppColors.navy),
+            const SizedBox(width: 8),
+            const Text('Verification Photo / Proof',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: AppColors.panel, borderRadius: BorderRadius.circular(6)),
+              child: const Text('Optional',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          const Text(
+            'Upload a clear photo or document of the issue. City staff and administrators can view this image to verify and respond to your complaint faster.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.35),
+          ),
+          const SizedBox(height: 10),
           if (_attachment == null)
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
                 onPressed: _pickFile,
-                icon: const Icon(Icons.attach_file_rounded, size: 18),
-                label: const Text('Attach JPG, PNG or PDF (max 5MB)'),
+                icon: const Icon(Icons.upload_file_rounded, size: 18),
+                label: const Text('Upload Photo (JPG, PNG) or PDF (max 5MB)'),
               ),
             )
-          else
+          else ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: AppColors.panel, borderRadius: BorderRadius.circular(12)),
-              child: Row(children: [
-                const Icon(Icons.insert_drive_file_outlined, color: AppColors.navy),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text('${_attachment!.name} · ${_size(_attachment!.size)}',
-                      overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                IconButton(
-                  tooltip: 'Remove file',
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => setState(() => _attachment = null),
-                ),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.panel,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Icon(Icons.check_circle_rounded, color: AppColors.forest, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(_attachment!.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      Text(_size(_attachment!.size),
+                          style: const TextStyle(color: AppColors.muted, fontSize: 11.5)),
+                    ]),
+                  ),
+                  TextButton.icon(
+                    onPressed: _pickFile,
+                    icon: const Icon(Icons.change_circle_outlined, size: 16),
+                    label: const Text('Change', style: TextStyle(fontSize: 12)),
+                  ),
+                  IconButton(
+                    tooltip: 'Remove photo',
+                    icon: const Icon(Icons.close_rounded, color: AppColors.star),
+                    onPressed: () => setState(() => _attachment = null),
+                  ),
+                ]),
+                if (_attachment!.name.toLowerCase().endsWith('.jpg') ||
+                    _attachment!.name.toLowerCase().endsWith('.jpeg') ||
+                    _attachment!.name.toLowerCase().endsWith('.png') ||
+                    _attachment!.name.toLowerCase().endsWith('.webp')) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      color: Colors.black12,
+                      child: Image.memory(
+                        _attachment!.bytes,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.centerLeft,
+                      ),
+                    ),
+                  ),
+                ],
               ]),
             ),
+          ],
           if (_attachmentError != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),

@@ -1,14 +1,17 @@
-import os, base64, hashlib, hmac, json, secrets, time, random
+import os, base64, hashlib, hmac, json, secrets, time, random, mimetypes
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import create_engine, String, Integer, DateTime, Text, Boolean, Float, select, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(_env_path)
@@ -335,6 +338,7 @@ def complaint_json(c: ComplaintRow, db: Session):
         'citizen_name': u.name if u else '',
         'citizen_email': u.email if u else '',
         'attachment_name': c.attachment_name,
+        'attachment_url': f'/api/complaints/{c.id}/attachment' if c.attachment_name else None,
     }
 
 # ─── Request schemas ──────────────────────────────────────────────────────────
@@ -844,23 +848,62 @@ def classify(data: ClassifyIn, user: User = Depends(current_user)):
 # ─── Complaints ───────────────────────────────────────────────────────────────
 
 @app.post('/api/complaints')
-def create_complaint(data: ComplaintIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+async def create_complaint(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_role(user, 'citizen')
-    nlp = _nlp_classify(data.description, data.category_id)
-    all_oids = nlp.get('all_office_ids', [data.office_id])
-    co_ids_str = ",".join(str(o) for o in all_oids if o != data.office_id)
+    content_type = request.headers.get('content-type', '').lower()
+    attachment_filename = None
+
+    if 'multipart/form-data' in content_type:
+        form = await request.form()
+        title = str(form.get('title', '')).strip()
+        description = str(form.get('description', '')).strip()
+        try:
+            category_id = int(form.get('category_id', 1))
+            office_id = int(form.get('office_id', 1))
+            location_id = int(form.get('location_id', 1))
+        except (ValueError, TypeError):
+            raise HTTPException(422, detail={'code': 'VALIDATION_ERROR', 'message': 'Invalid category, office, or location ID.'})
+
+        file_field = form.get('attachment')
+        if file_field and hasattr(file_field, 'filename') and file_field.filename:
+            raw_name = os.path.basename(file_field.filename)
+            safe_name = f"{int(time.time())}_{secrets.token_hex(4)}_{raw_name}"
+            save_path = os.path.join(UPLOAD_DIR, safe_name)
+            content = await file_field.read()
+            with open(save_path, 'wb') as f:
+                f.write(content)
+            attachment_filename = safe_name
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, detail={'code': 'BAD_REQUEST', 'message': 'Invalid JSON or multipart body.'})
+        data = ComplaintIn(**body)
+        title = data.title.strip()
+        description = data.description.strip()
+        category_id = data.category_id
+        office_id = data.office_id
+        location_id = data.location_id
+
+    if len(title) < 3 or len(description) < 10:
+        raise HTTPException(422, detail={'code': 'VALIDATION_ERROR', 'message': 'Title must be at least 3 characters and description at least 10 characters.'})
+
+    nlp = _nlp_classify(description, category_id)
+    all_oids = nlp.get('all_office_ids', [office_id])
+    co_ids_str = ",".join(str(o) for o in all_oids if o != office_id)
     c = ComplaintRow(
         citizen_id=user.id,
-        title=data.title.strip(),
-        description=data.description.strip(),
-        category_id=data.category_id,
-        office_id=data.office_id,
+        title=title,
+        description=description,
+        category_id=category_id,
+        office_id=office_id,
         co_office_ids=co_ids_str,
-        location_id=data.location_id,
+        location_id=location_id,
         status='submitted',
         priority=nlp['priority'],
         sentiment=nlp['sentiment'],
-        confidence=nlp['confidence']
+        confidence=nlp['confidence'],
+        attachment_name=attachment_filename
     )
     db.add(c); db.commit(); db.refresh(c)
 
@@ -875,19 +918,20 @@ def create_complaint(data: ComplaintIn, user: User = Depends(current_user), db: 
         db.execute(text("""
             INSERT INTO complaints_tbl (
                 user_id, office_id, category_id, location_id, risk_level_id, status_id,
-                title, description, date_submitted
+                title, description, attachment, date_submitted
             ) VALUES (
                 :uid, :oid, :cid, :lid, :rid, 1,
-                :title, :desc, NOW()
+                :title, :desc, :att, NOW()
             )
         """), {
             'uid': u_id,
-            'oid': data.office_id,
-            'cid': data.category_id,
-            'lid': data.location_id,
+            'oid': office_id,
+            'cid': category_id,
+            'lid': location_id,
             'rid': r_id,
-            'title': data.title.strip(),
-            'desc': data.description.strip(),
+            'title': title,
+            'desc': description,
+            'att': attachment_filename or '',
         })
         db.commit()
     except Exception as e:
@@ -895,6 +939,48 @@ def create_complaint(data: ComplaintIn, user: User = Depends(current_user), db: 
         print(f"Notice: complaints_tbl sync: {e}")
 
     return ok(complaint_json(c, db))
+
+@app.get('/api/complaints/{complaint_id}/attachment')
+def get_complaint_attachment(
+    complaint_id: int,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db)
+):
+    raw_token = None
+    if authorization and authorization.startswith('Bearer '):
+        raw_token = authorization[7:].strip()
+    elif token:
+        raw_token = token.strip()
+
+    if not raw_token:
+        raise HTTPException(401, detail={'code': 'UNAUTHORIZED', 'message': 'Authentication required to view attachment.'})
+
+    try:
+        payload = decode_token(raw_token)
+        user = db.get(User, int(payload['sub']))
+        if not user or not user.active:
+            raise ValueError()
+    except Exception:
+        raise HTTPException(401, detail={'code': 'UNAUTHORIZED', 'message': 'Invalid or expired session.'})
+
+    c = db.get(ComplaintRow, complaint_id)
+    if not c or not c.attachment_name:
+        raise HTTPException(404, detail={'code': 'NOT_FOUND', 'message': 'Attachment not found.'})
+
+    # Permission check: Citizen owner, Admin, or Staff of the assigned/co-office
+    co_ids = [int(x) for x in (c.co_office_ids or '').split(',') if x.strip().isdigit()]
+    if user.role == 'citizen' and c.citizen_id != user.id:
+        raise HTTPException(403, detail={'code': 'FORBIDDEN', 'message': 'Not your complaint.'})
+    if user.role == 'staff' and c.office_id != user.office_id and user.office_id not in co_ids:
+        raise HTTPException(403, detail={'code': 'FORBIDDEN', 'message': 'Not assigned to your office.'})
+
+    file_path = os.path.join(UPLOAD_DIR, c.attachment_name)
+    if not os.path.isfile(file_path):
+        raise HTTPException(404, detail={'code': 'NOT_FOUND', 'message': 'File missing from server disk.'})
+
+    mime, _ = mimetypes.guess_type(file_path)
+    return FileResponse(file_path, media_type=mime or 'application/octet-stream', filename=c.attachment_name)
 
 @app.get('/api/complaints')
 def list_own(user: User = Depends(current_user), db: Session = Depends(get_db)):

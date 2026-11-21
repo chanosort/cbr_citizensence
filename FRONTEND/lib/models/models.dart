@@ -158,7 +158,20 @@ class Complaint {
   final String citizenName;
   final String citizenEmail;
   final String? attachmentName;
+  final String? attachmentUrl;
   final List<int> coOfficeIds;
+
+  bool get hasAttachment => attachmentName != null && attachmentName!.trim().isNotEmpty;
+
+  bool get isImageAttachment {
+    if (!hasAttachment) return false;
+    final lower = attachmentName!.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif');
+  }
 
   const Complaint({
     required this.id,
@@ -174,10 +187,11 @@ class Complaint {
     this.citizenName = '',
     this.citizenEmail = '',
     this.attachmentName,
+    this.attachmentUrl,
     this.coOfficeIds = const [],
   });
 
-  Complaint copyWith({ComplaintStatus? status}) => Complaint(
+  Complaint copyWith({ComplaintStatus? status, String? attachmentName, String? attachmentUrl}) => Complaint(
         id: id,
         title: title,
         description: description,
@@ -190,7 +204,8 @@ class Complaint {
         createdAt: createdAt,
         citizenName: citizenName,
         citizenEmail: citizenEmail,
-        attachmentName: attachmentName,
+        attachmentName: attachmentName ?? this.attachmentName,
+        attachmentUrl: attachmentUrl ?? this.attachmentUrl,
         coOfficeIds: coOfficeIds,
       );
 
@@ -206,7 +221,9 @@ class Complaint {
         sentiment: (j['sentiment'] as String?) ?? 'neutral',
         createdAt: _dt(j['created_at']),
         citizenName: (j['citizen_name'] as String?) ?? '',
+        citizenEmail: (j['citizen_email'] as String?) ?? '',
         attachmentName: j['attachment_name'] as String?,
+        attachmentUrl: j['attachment_url'] as String?,
         coOfficeIds: ((j['co_office_ids'] as List?) ?? const [])
             .map((e) => (e as num).toInt())
             .toList(),

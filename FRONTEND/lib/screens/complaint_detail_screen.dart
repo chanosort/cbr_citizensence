@@ -185,12 +185,15 @@ class _Main extends StatelessWidget {
           kv('Location', d.locationName.isEmpty ? '—' : d.locationName),
           kv('Submitted', fmtDate(c.createdAt)),
           if (showCitizen && c.citizenName.isNotEmpty) kv('Filed by', c.citizenName),
-          if (c.attachmentName != null) kv('Attachment', c.attachmentName!),
           const Divider(color: AppColors.line, height: 28),
           const Text('Description', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           Text(c.description.isEmpty ? 'No description provided.' : c.description,
               style: const TextStyle(height: 1.5)),
+          if (c.hasAttachment) ...[
+            const Divider(color: AppColors.line, height: 28),
+            _VerificationPhotoCard(c: c),
+          ],
         ]),
       ),
       const SizedBox(height: 18),
@@ -405,5 +408,161 @@ class _UpdateCardState extends State<_UpdateCard> {
         ]),
       ),
     );
+  }
+}
+
+class _VerificationPhotoCard extends StatelessWidget {
+  const _VerificationPhotoCard({required this.c});
+  final Complaint c;
+
+  void _openFullScreen(BuildContext context, String imageUrl, Map<String, String> headers) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black.withValues(alpha: 0.9),
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                panEnabled: true,
+                minScale: 0.8,
+                maxScale: 5.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    imageUrl,
+                    headers: headers,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text('Failed to load full image', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: IconButton(
+                style: IconButton.styleFrom(backgroundColor: Colors.white24),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final api = context.read<ApiService>();
+    final imageUrl = api.getAttachmentUrl(c.id);
+    final headers = api.authHeaders;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Icon(Icons.verified_outlined, size: 18, color: AppColors.navy),
+        const SizedBox(width: 8),
+        const Text('Verification Photo / Evidence',
+            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: AppColors.navy)),
+        const Spacer(),
+        if (c.isImageAttachment && imageUrl.isNotEmpty)
+          TextButton.icon(
+            onPressed: () => _openFullScreen(context, imageUrl, headers),
+            icon: const Icon(Icons.zoom_in_rounded, size: 16),
+            label: const Text('View Full Screen', style: TextStyle(fontSize: 12)),
+          ),
+      ]),
+      const SizedBox(height: 8),
+      if (c.isImageAttachment && imageUrl.isNotEmpty)
+        GestureDetector(
+          onTap: () => _openFullScreen(context, imageUrl, headers),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 280),
+            decoration: BoxDecoration(
+              color: AppColors.panel,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Center(
+                    child: Image.network(
+                      imageUrl,
+                      headers: headers,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.broken_image_rounded, size: 36, color: AppColors.muted),
+                          const SizedBox(height: 8),
+                          Text(c.attachmentName ?? 'Attached photo',
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          const Text('Could not load image preview from server.',
+                              style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.touch_app_rounded, color: Colors.white, size: 14),
+                      SizedBox(width: 4),
+                      Text('Tap to expand',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        )
+      else
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: Row(children: [
+            const Icon(Icons.description_outlined, color: AppColors.navy, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(c.attachmentName ?? 'Document attached',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                const SizedBox(height: 2),
+                const Text('Verification document attached by citizen',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              ]),
+            ),
+          ]),
+        ),
+    ]);
   }
 }

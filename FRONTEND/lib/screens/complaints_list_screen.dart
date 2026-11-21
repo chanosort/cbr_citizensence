@@ -299,7 +299,42 @@ class _ComplaintTile extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(meta, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
                       const SizedBox(height: 10),
-                      Wrap(spacing: 8, runSpacing: 6, children: [PriorityChip(c.priority), StatusChip(c.status)]),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          PriorityChip(c.priority),
+                          StatusChip(c.status),
+                          if (c.hasAttachment)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.panel,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppColors.line),
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(
+                                  c.isImageAttachment
+                                      ? Icons.photo_camera_rounded
+                                      : Icons.attach_file_rounded,
+                                  size: 13,
+                                  color: AppColors.navy,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  c.isImageAttachment ? 'Photo Proof' : 'Attached Proof',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.navy,
+                                  ),
+                                ),
+                              ]),
+                            ),
+                        ],
+                      ),
                     ]),
                   ),
                 ),

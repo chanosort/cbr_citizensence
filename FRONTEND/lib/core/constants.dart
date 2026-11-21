@@ -4,13 +4,8 @@ import 'package:flutter/material.dart';
 /// Production/Live default: connects to the real backend with real OTP and database.
 const bool kUseMockApi = false;
 
-/// Auto-detects the right API URL:
-/// - In browser on PC (web): connects to 'http://127.0.0.1:8000'
-/// - On a physical phone / tablet (Android/iOS): connects to 'http://10.229.253.240:8000'
-const String kApiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.229.253.240:8000',
-);
+/// Connects to your live Render backend
+const String kApiBaseUrl = 'https://cbr-citizensense.onrender.com';
 
 enum UserRole { citizen, staff, admin }
 

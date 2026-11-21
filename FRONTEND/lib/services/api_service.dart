@@ -75,6 +75,8 @@ abstract class ApiService {
   Future<void> setUserActive(int id, bool active);
   Future<List<OfficeSummary>> adminOffices();
   Future<List<AppNotice>> notifications();
+  String getAttachmentUrl(int complaintId);
+  Map<String, String> get authHeaders;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,14 @@ class HttpApiService implements ApiService {
 
   @override
   void setToken(String? token) => _token = token;
+
+  @override
+  Map<String, String> get authHeaders => Map<String, String>.unmodifiable(_auth);
+
+  @override
+  String getAttachmentUrl(int complaintId) => _token != null
+      ? '$baseUrl/api/complaints/$complaintId/attachment?token=$_token'
+      : '$baseUrl/api/complaints/$complaintId/attachment';
 
   Map<String, String> get _auth => {if (_token != null) 'Authorization': 'Bearer $_token'};
   Map<String, String> get _headers => {'Content-Type': 'application/json', ..._auth};
@@ -262,7 +272,8 @@ class HttpApiService implements ApiService {
       priority: priorityFrom(d['priority'] as String?),
       sentiment: (d['sentiment'] as String?) ?? 'neutral',
       createdAt: DateTime.now(),
-      attachmentName: attachment?.name,
+      attachmentName: d['attachment_name'] as String? ?? attachment?.name,
+      attachmentUrl: d['attachment_url'] as String?,
     );
   }
 
@@ -445,6 +456,12 @@ class MockApiService implements ApiService {
   void setToken(String? token) {
     if (token == null) _me = null;
   }
+
+  @override
+  Map<String, String> get authHeaders => const {};
+
+  @override
+  String getAttachmentUrl(int complaintId) => '';
 
   @override
   Future<AuthSession> login({required String email, required String password}) async {
