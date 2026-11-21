@@ -108,8 +108,8 @@ class _BrandPanel extends StatelessWidget {
             Container(width: 48, height: 3, color: AppColors.gold),
             const SizedBox(height: 14),
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 380),
-              child: Text(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: const Text(
                 'Report a concern once. Machine learning rates how urgent it is and sends it to the right city office.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),

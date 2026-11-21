@@ -296,7 +296,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
   }
 
   Widget _formCard({required Widget? inlineCard}) {
-    final space = const SizedBox(height: 16);
+    const space = SizedBox(height: 16);
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -463,7 +463,7 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             validator: (v) => v == null ? 'Select the office that should receive this.' : null,
           ),
           space,
-          Text('Photo or document (optional)', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          const Text('Photo or document (optional)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
           const SizedBox(height: 8),
           if (_attachment == null)
             Align(

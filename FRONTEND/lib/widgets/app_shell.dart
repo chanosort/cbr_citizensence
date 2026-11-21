@@ -109,12 +109,12 @@ class _Sidebar extends StatelessWidget {
       ),
       child: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
             child: Row(children: [
-              const SealLogo(size: 52),
-              const SizedBox(width: 12),
-              const Expanded(
+              SealLogo(size: 52),
+              SizedBox(width: 12),
+              Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('CitizenSense',
                       style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),

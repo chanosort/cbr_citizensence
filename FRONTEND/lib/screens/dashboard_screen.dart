@@ -340,7 +340,7 @@ class _TrendCard extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 10),
-        Row(children: const [
+        const Row(children: [
           _Legend(color: Color(0xFF2F6BDB), label: 'Pending'),
           SizedBox(width: 16),
           _Legend(color: Color(0xFF35C2F0), label: 'In Progress'),

@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <!-- ADD THIS LINE HERE -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="cbr_citizensense"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        
+        <!-- ADD THIS LINE HERE -->
+        android:usesCleartextTraffic="true"> 
+        
+        <!-- Leave the rest of the code alone -->
+        <activity
+            android:name=".MainActivity"
+            ...

@@ -534,7 +534,7 @@ class MockApiService implements ApiService {
       if (parts.length == 2) {
         final n = parts[0];
         final d = parts[1];
-        final masked = (n.length > 2 ? '${n[0]}***${n[n.length - 1]}' : '${n[0]}***') + '@$d';
+        final masked = '${n.length > 2 ? '${n[0]}***${n[n.length - 1]}' : '${n[0]}***'}@$d';
         return masked;
       }
       return u.email;
@@ -700,7 +700,7 @@ class MockApiService implements ApiService {
     }
     final msg = (message ?? '').trim();
     if (msg.length > 500) {
-      throw ApiException(422, 'VALIDATION_ERROR', 'Some fields are invalid',
+      throw const ApiException(422, 'VALIDATION_ERROR', 'Some fields are invalid',
           details: {'response_message': 'Keep the response under 500 characters.'});
     }
     if (!allowedNext(c.status).contains(status)) {

@@ -181,6 +181,7 @@ class LinePainter extends CustomPainter {
       const bh = 76.0;
       var bx = hx + 14;
       if (bx + bw > size.width - 4) bx = hx - 14 - bw;
+      // ignore: prefer_const_declarations
       final by = top + 6;
       final rrect = RRect.fromRectAndRadius(Rect.fromLTWH(bx, by, bw, bh), const Radius.circular(10));
       canvas.drawRRect(rrect.shift(const Offset(0, 2)), Paint()..color = Colors.black.withValues(alpha: 0.06));

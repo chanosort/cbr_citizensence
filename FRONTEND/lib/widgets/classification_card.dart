@@ -29,7 +29,7 @@ class ClassificationCard extends StatelessWidget {
     if (!hasCategory) {
       content = const _Idle();
     } else if (error != null && r == null) {
-      content = _Notice(
+      content = const _Notice(
         icon: Icons.cloud_off_rounded,
         text: 'Could not rate the priority right now. You can still submit; the server will classify it.',
       );

@@ -14,12 +14,12 @@ class UsersOfficesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppShell(
+    return const AppShell(
       title: 'Users & Offices',
       activeLabel: 'Users & Offices',
       child: DefaultTabController(
         length: 2,
-        child: Column(children: const [
+        child: Column(children: [
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: TabBar(
