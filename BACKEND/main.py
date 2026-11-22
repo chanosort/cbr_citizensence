@@ -101,6 +101,25 @@ class OtpToken(Base):
 
 Base.metadata.create_all(bind=engine)
 
+def _run_migrations(db_engine):
+    try:
+        from sqlalchemy import text
+        with db_engine.connect() as conn:
+            for col, col_type in [
+                ('co_office_ids', 'VARCHAR(100)'),
+                ('attachment_name', 'VARCHAR(255)'),
+                ('response_message', 'TEXT'),
+            ]:
+                try:
+                    conn.execute(text(f'ALTER TABLE citizensense_complaints ADD COLUMN {col} {col_type}'))
+                    conn.commit()
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f'Migration note: {e}')
+
+_run_migrations(engine)
+
 app = FastAPI(title='CBR CitizenSense API', version='0.2.0')
 
 app.add_middleware(
