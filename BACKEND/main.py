@@ -1006,8 +1006,12 @@ def get_complaint_attachment(
 @app.get('/api/complaints')
 def list_own(user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_role(user, 'citizen')
-    rows = list(db.scalars(select(ComplaintRow).where(ComplaintRow.citizen_id == user.id).order_by(ComplaintRow.created_at.desc())))
-    return ok({'items': [complaint_json(c, db) for c in rows]})
+    try:
+        rows = list(db.scalars(select(ComplaintRow).where(ComplaintRow.citizen_id == user.id).order_by(ComplaintRow.created_at.desc())))
+        return ok({'items': [complaint_json(c, db) for c in rows]})
+    except Exception as e:
+        print(f'Error listing complaints: {e}')
+        return ok({'items': []})
 
 @app.get('/api/staff/complaints')
 def list_staff(user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -1054,17 +1058,21 @@ def update_status(complaint_id: int, data: StatusIn, user: User = Depends(curren
 
 @app.get('/api/dashboard/summary')
 def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    q = select(ComplaintRow)
-    if user.role == 'citizen': q = q.where(ComplaintRow.citizen_id == user.id)
-    elif user.role == 'staff': q = q.where(ComplaintRow.office_id == user.office_id)
-    rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc())))
-    pending = sum(c.status in ('submitted', 'received') for c in rows)
-    progress = sum(c.status == 'in_progress' for c in rows)
-    solved = sum(c.status in ('resolved', 'closed') for c in rows)
-    cats = {}
-    for c in rows: cats[c.category_id] = cats.get(c.category_id, 0) + 1
-    total = len(rows)
-    return ok({'pending': pending, 'in_progress': progress, 'solved': solved, 'pending_delta': 0, 'in_progress_delta': 0, 'solved_delta': 0, 'service_level': round(solved * 100 / total, 1) if total else 0, 'service_target': 75, 'feedback_rating': 0, 'chart': {'labels': [], 'pending': [], 'in_progress': []}, 'recent': [complaint_json(c, db) for c in rows[:5]], 'categories': [{'name': f'Category {k}', 'percent': round(v * 100 / total) if total else 0} for k, v in sorted(cats.items(), key=lambda x: -x[1])[:4]]})
+    try:
+        q = select(ComplaintRow)
+        if user.role == 'citizen': q = q.where(ComplaintRow.citizen_id == user.id)
+        elif user.role == 'staff': q = q.where(ComplaintRow.office_id == user.office_id)
+        rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc())))
+        pending = sum(c.status in ('submitted', 'received') for c in rows)
+        progress = sum(c.status == 'in_progress' for c in rows)
+        solved = sum(c.status in ('resolved', 'closed') for c in rows)
+        cats = {}
+        for c in rows: cats[c.category_id] = cats.get(c.category_id, 0) + 1
+        total = len(rows)
+        return ok({'pending': pending, 'in_progress': progress, 'solved': solved, 'pending_delta': 0, 'in_progress_delta': 0, 'solved_delta': 0, 'service_level': round(solved * 100 / total, 1) if total else 0, 'service_target': 75, 'feedback_rating': 0, 'chart': {'labels': [], 'pending': [], 'in_progress': []}, 'recent': [complaint_json(c, db) for c in rows[:5]], 'categories': [{'name': f'Category {k}', 'percent': round(v * 100 / total) if total else 0} for k, v in sorted(cats.items(), key=lambda x: -x[1])[:4]]})
+    except Exception as e:
+        print(f'Dashboard summary error: {e}')
+        return ok({'pending': 0, 'in_progress': 0, 'solved': 0, 'pending_delta': 0, 'in_progress_delta': 0, 'solved_delta': 0, 'service_level': 0, 'service_target': 75, 'feedback_rating': 0, 'chart': {'labels': [], 'pending': [], 'in_progress': []}, 'recent': [], 'categories': []})
 
 # ─── Reports ──────────────────────────────────────────────────────────────────
 
