@@ -135,6 +135,13 @@ async def api_error_handler(request: Request, exc: HTTPException):
     detail = exc.detail if isinstance(exc.detail, dict) else {'code': 'REQUEST_ERROR', 'message': str(exc.detail), 'details': {}}
     return JSONResponse(status_code=exc.status_code, content={'error': {'code': detail.get('code', 'REQUEST_ERROR'), 'message': detail.get('message', 'Request failed.'), 'details': detail.get('details', {})}})
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    err_tb = traceback.format_exc()
+    print(f'[GLOBAL 500] {exc}\n{err_tb}')
+    return JSONResponse(status_code=500, content={'error': {'code': 'INTERNAL_ERROR', 'message': str(exc), 'details': {'traceback': err_tb}}})
+
 # ─── DB helpers ──────────────────────────────────────────────────────────────
 
 def get_db():
@@ -416,7 +423,7 @@ class AdminCreateUserIn(BaseModel):
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 @app.get('/')
-def home(): return {'message': 'CBR CitizenSense API is running', 'docs': '/docs'}
+def home(): return {'message': 'CBR CitizenSense API is running', 'version': '2.1.0-dashboard-fix', 'docs': '/docs'}
 
 @app.get('/health')
 @app.get('/api/health')
