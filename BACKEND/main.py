@@ -17,6 +17,8 @@ _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(_env_path)
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 JWT_SECRET = os.getenv('JWT_SECRET', '').strip()
 SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com').strip()
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
