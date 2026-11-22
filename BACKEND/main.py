@@ -69,22 +69,25 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class ComplaintRow(Base):
-    __tablename__ = 'citizensense_complaints'
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    citizen_id: Mapped[int] = mapped_column(Integer, index=True)
+    __tablename__ = 'complaints_tbl'
+    id: Mapped[int] = mapped_column('complaint_id', Integer, primary_key=True, autoincrement=True)
+    citizen_id: Mapped[int] = mapped_column('user_id', Integer, index=True)
+    office_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
+    category_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
+    location_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
+    risk_level_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=2)
+    status_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text)
-    category_id: Mapped[int] = mapped_column(Integer)
-    office_id: Mapped[int] = mapped_column(Integer)
-    location_id: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(30), default='submitted')
-    priority: Mapped[str] = mapped_column(String(20), default='medium')
-    sentiment: Mapped[str] = mapped_column(String(20), default='neutral')
-    confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    attachment_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    attachment_name: Mapped[Optional[str]] = mapped_column('attachment', String(255), nullable=True)
+    date_resolved: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(30), default='submitted', nullable=True)
+    priority: Mapped[Optional[str]] = mapped_column(String(20), default='medium', nullable=True)
+    sentiment: Mapped[Optional[str]] = mapped_column(String(20), default='neutral', nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
     response_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     co_office_ids: Mapped[Optional[str]] = mapped_column(String(100), default='', nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at: Mapped[datetime] = mapped_column('date_submitted', DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 # Stores OTP codes for email verification and password reset.
 # Each row is single-use and expires after OTP_TTL_MINUTES.
@@ -107,11 +110,15 @@ def _run_migrations(db_engine):
         with db_engine.connect() as conn:
             for col, col_type in [
                 ('co_office_ids', 'VARCHAR(100)'),
-                ('attachment_name', 'VARCHAR(255)'),
+                ('attachment', 'VARCHAR(255)'),
                 ('response_message', 'TEXT'),
+                ('sentiment', "VARCHAR(20) DEFAULT 'neutral'"),
+                ('confidence', 'FLOAT DEFAULT 0.0'),
+                ('status', "VARCHAR(30) DEFAULT 'submitted'"),
+                ('priority', "VARCHAR(20) DEFAULT 'medium'"),
             ]:
                 try:
-                    conn.execute(text(f'ALTER TABLE citizensense_complaints ADD COLUMN {col} {col_type}'))
+                    conn.execute(text(f'ALTER TABLE complaints_tbl ADD COLUMN {col} {col_type}'))
                     conn.commit()
                 except Exception:
                     pass
@@ -347,7 +354,13 @@ def _verify_otp(db: Session, email: str, purpose: str, code: str) -> bool:
 # ─── Serialisers ─────────────────────────────────────────────────────────────
 
 def user_json(u): return {'id': u.id, 'name': u.name, 'username': u.username or '', 'email': u.email, 'role': u.role, 'office_id': u.office_id, 'active': u.active}
-def iso(dt): return (dt or datetime.now(timezone.utc)).isoformat()
+def iso(dt):
+    if dt is None:
+        return datetime.now(timezone.utc).isoformat()
+    if hasattr(dt, 'isoformat'):
+        return dt.isoformat()
+    return str(dt)
+
 def complaint_json(c: ComplaintRow, db: Session):
     u = db.get(User, c.citizen_id)
     co_ids = [int(x) for x in (c.co_office_ids or '').split(',') if x.strip().isdigit()]
@@ -355,15 +368,15 @@ def complaint_json(c: ComplaintRow, db: Session):
         'id': c.id,
         'title': c.title,
         'description': c.description,
-        'category_id': c.category_id,
-        'office_id': c.office_id,
+        'category_id': c.category_id or 1,
+        'office_id': c.office_id or 1,
         'co_office_ids': co_ids,
-        'location_id': c.location_id,
-        'status': c.status,
-        'priority': c.priority,
-        'sentiment': c.sentiment,
+        'location_id': c.location_id or 1,
+        'status': c.status or 'submitted',
+        'priority': c.priority or 'medium',
+        'sentiment': c.sentiment or 'neutral',
         'created_at': iso(c.created_at),
-        'citizen_name': u.name if u else '',
+        'citizen_name': u.name if u else 'Citizen',
         'citizen_email': u.email if u else '',
         'attachment_name': c.attachment_name,
         'attachment_url': f'/api/complaints/{c.id}/attachment' if c.attachment_name else None,
@@ -919,6 +932,8 @@ async def create_complaint(request: Request, user: User = Depends(current_user),
     nlp = _nlp_classify(description, category_id)
     all_oids = nlp.get('all_office_ids', [office_id])
     co_ids_str = ",".join(str(o) for o in all_oids if o != office_id)
+    risk_map = {'low': 1, 'medium': 2, 'high': 3, 'critical': 4}
+    r_id = risk_map.get(nlp.get('priority', 'medium'), 2)
     c = ComplaintRow(
         citizen_id=user.id,
         title=title,
@@ -928,44 +943,14 @@ async def create_complaint(request: Request, user: User = Depends(current_user),
         co_office_ids=co_ids_str,
         location_id=location_id,
         status='submitted',
+        status_id=1,
+        risk_level_id=r_id,
         priority=nlp['priority'],
         sentiment=nlp['sentiment'],
         confidence=nlp['confidence'],
         attachment_name=attachment_filename
     )
     db.add(c); db.commit(); db.refresh(c)
-
-    # Synchronize to complaints_tbl so it immediately shows in pgAdmin
-    try:
-        from sqlalchemy import text
-        u_id = db.execute(text("SELECT user_id FROM users_tbl WHERE email = :em"), {'em': user.email}).scalar()
-        if not u_id:
-            u_id = 1
-        risk_map = {'low': 1, 'medium': 2, 'high': 3, 'critical': 4}
-        r_id = risk_map.get(nlp.get('priority', 'medium'), 2)
-        db.execute(text("""
-            INSERT INTO complaints_tbl (
-                user_id, office_id, category_id, location_id, risk_level_id, status_id,
-                title, description, attachment, date_submitted
-            ) VALUES (
-                :uid, :oid, :cid, :lid, :rid, 1,
-                :title, :desc, :att, NOW()
-            )
-        """), {
-            'uid': u_id,
-            'oid': office_id,
-            'cid': category_id,
-            'lid': location_id,
-            'rid': r_id,
-            'title': title,
-            'desc': description,
-            'att': attachment_filename or '',
-        })
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        print(f"Notice: complaints_tbl sync: {e}")
-
     return ok(complaint_json(c, db))
 
 @app.get('/api/complaints/{complaint_id}/attachment')
@@ -1058,7 +1043,13 @@ def update_status(complaint_id: int, data: StatusIn, user: User = Depends(curren
         raise HTTPException(403, detail={'code': 'FORBIDDEN', 'message': 'Complaint belongs to another office.', 'details': {}})
     legal = {'submitted': ['received', 'in_progress'], 'received': ['in_progress', 'resolved'], 'in_progress': ['resolved'], 'resolved': ['closed', 'in_progress'], 'closed': []}
     if data.status not in legal.get(c.status, []): raise HTTPException(409, detail={'code': 'INVALID_TRANSITION', 'message': 'This status change is not allowed.', 'details': {}})
-    c.status = data.status; c.response_message = (data.response_message or '').strip() or None; db.commit()
+    status_map = {'submitted': 1, 'received': 1, 'in_progress': 2, 'resolved': 3, 'closed': 4}
+    c.status = data.status
+    c.status_id = status_map.get(data.status, c.status_id)
+    if data.status in ('resolved', 'closed'):
+        c.date_resolved = datetime.now(timezone.utc)
+    c.response_message = (data.response_message or '').strip() or None
+    db.commit()
     return ok({'message': 'Status updated.'})
 
 # ─── Dashboard ────────────────────────────────────────────────────────────────

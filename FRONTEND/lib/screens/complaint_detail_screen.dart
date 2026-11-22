@@ -90,8 +90,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
       );
     } else {
       final d = _d!;
-      final canUpdate =
-          role == UserRole.staff && user?.officeId == d.complaint.officeId;
+      final canUpdate = role == UserRole.admin ||
+          (role == UserRole.staff && user?.officeId == d.complaint.officeId);
       body = LayoutBuilder(builder: (context, box) {
         final wide = box.maxWidth >= 980;
         final main = _Main(d: d, showCitizen: role != UserRole.citizen);
