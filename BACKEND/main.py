@@ -1079,7 +1079,7 @@ def list_staff(user: User = Depends(current_user), db: Session = Depends(get_db)
         select(ComplaintRow).where(
             (ComplaintRow.office_id == user.office_id) |
             (ComplaintRow.co_office_ids.like(f'%{user_oid}%'))
-        ).order_by(ComplaintRow.created_at.desc())
+        ).order_by(ComplaintRow.created_at.desc()).limit(2030)
     ))
     users_cache = {u.id: u for u in db.scalars(select(User)).all()}
     return ok({'items': [complaint_json(c, db, users_cache.get(c.citizen_id)) for c in rows]})
@@ -1087,7 +1087,7 @@ def list_staff(user: User = Depends(current_user), db: Session = Depends(get_db)
 @app.get('/api/admin/complaints')
 def list_all(user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_role(user, 'admin')
-    rows = list(db.scalars(select(ComplaintRow).order_by(ComplaintRow.created_at.desc())))
+    rows = list(db.scalars(select(ComplaintRow).order_by(ComplaintRow.created_at.desc()).limit(2030)))
     users_cache = {u.id: u for u in db.scalars(select(User)).all()}
     return ok({'items': [complaint_json(c, db, users_cache.get(c.citizen_id)) for c in rows]})
 
@@ -1128,7 +1128,7 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
         q = select(ComplaintRow)
         if user.role == 'citizen': q = q.where(ComplaintRow.citizen_id == user.id)
         elif user.role == 'staff': q = q.where(ComplaintRow.office_id == user.office_id)
-        rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc())))
+        rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc()).limit(2030)))
         pending = sum(c.status in ('submitted', 'received') for c in rows)
         progress = sum(c.status == 'in_progress' for c in rows)
         solved = sum(c.status in ('resolved', 'closed') for c in rows)
