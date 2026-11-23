@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart' show ValueKey;
+import 'package:flutter/widgets.dart' show Page, ValueKey, Widget;
 import 'package:go_router/go_router.dart';
 
 import 'core/constants.dart';
@@ -14,6 +14,10 @@ import 'screens/reports_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/submit_complaint_screen.dart';
 import 'screens/users_offices_screen.dart';
+
+/// Helper to produce a zero-transition page without zoom/minimize-to-maximize effect.
+Page<void> _noTransition(GoRouterState state, Widget child) =>
+    NoTransitionPage<void>(key: state.pageKey, child: child);
 
 /// Routes follow the Activity 6 navigation plan. The redirect is the client-side
 /// guard; the Flask API still re-checks the JWT and role on every request.
@@ -59,58 +63,91 @@ GoRouter buildRouter(AuthProvider auth) {
     routes: [
       GoRoute(
         path: '/login',
-        builder: (c, s) => LoginScreen(
-          justRegistered: s.uri.queryParameters['registered'] == '1',
-          justVerified: s.uri.queryParameters['verified'] == '1',
-          justReset: s.uri.queryParameters['reset'] == '1',
+        pageBuilder: (c, s) => _noTransition(
+          s,
+          LoginScreen(
+            justRegistered: s.uri.queryParameters['registered'] == '1',
+            justVerified: s.uri.queryParameters['verified'] == '1',
+            justReset: s.uri.queryParameters['reset'] == '1',
+          ),
         ),
       ),
-      GoRoute(path: '/register', builder: (c, s) => const RegisterScreen()),
+      GoRoute(
+        path: '/register',
+        pageBuilder: (c, s) => _noTransition(s, const RegisterScreen()),
+      ),
 
       // ── OTP / password-reset routes ────────────────────────────────────
       GoRoute(
         path: '/verify-email',
-        builder: (c, s) {
+        pageBuilder: (c, s) {
           final email = s.uri.queryParameters['email'] ?? '';
-          return VerifyEmailScreen(email: email);
+          return _noTransition(s, VerifyEmailScreen(email: email));
         },
       ),
-      GoRoute(path: '/forgot-password', builder: (c, s) => const ForgotPasswordScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        pageBuilder: (c, s) => _noTransition(s, const ForgotPasswordScreen()),
+      ),
       GoRoute(
         path: '/reset-password',
-        builder: (c, s) {
+        pageBuilder: (c, s) {
           final email = s.uri.queryParameters['email'] ?? '';
           final account = s.uri.queryParameters['account'];
-          return ResetPasswordScreen(email: email, account: account);
+          return _noTransition(s, ResetPasswordScreen(email: email, account: account));
         },
       ),
 
       // ── App screens ────────────────────────────────────────────────────
-      GoRoute(path: '/citizen/dashboard', builder: (c, s) => const DashboardScreen()),
-      GoRoute(path: '/staff/dashboard', builder: (c, s) => const DashboardScreen()),
-      GoRoute(path: '/admin/dashboard', builder: (c, s) => const DashboardScreen()),
-      GoRoute(path: '/submit-complaint', builder: (c, s) => const SubmitComplaintScreen()),
+      GoRoute(
+        path: '/citizen/dashboard',
+        pageBuilder: (c, s) => _noTransition(s, const DashboardScreen()),
+      ),
+      GoRoute(
+        path: '/staff/dashboard',
+        pageBuilder: (c, s) => _noTransition(s, const DashboardScreen()),
+      ),
+      GoRoute(
+        path: '/admin/dashboard',
+        pageBuilder: (c, s) => _noTransition(s, const DashboardScreen()),
+      ),
+      GoRoute(
+        path: '/submit-complaint',
+        pageBuilder: (c, s) => _noTransition(s, const SubmitComplaintScreen()),
+      ),
       for (final path in const ['/complaint-tracking', '/complaint-review', '/admin/complaints'])
         GoRoute(
           path: path,
-          builder: (c, s) {
+          pageBuilder: (c, s) {
             final q = s.uri.queryParameters['q'] ?? '';
-            return ComplaintsListScreen(key: ValueKey('$path|$q'), initialQuery: q);
+            return _noTransition(s, ComplaintsListScreen(key: ValueKey('$path|$q'), initialQuery: q));
           },
         ),
       GoRoute(
         path: '/complaints/:id',
-        builder: (c, s) {
+        pageBuilder: (c, s) {
           final id = int.tryParse(s.pathParameters['id'] ?? '');
-          if (id == null) return const UnauthorizedScreen();
-          return ComplaintDetailScreen(key: ValueKey('complaint-$id'), id: id);
+          if (id == null) return _noTransition(s, const UnauthorizedScreen());
+          return _noTransition(s, ComplaintDetailScreen(key: ValueKey('complaint-$id'), id: id));
         },
       ),
-      GoRoute(path: '/reports-analytics', builder: (c, s) => const ReportsScreen()),
-      GoRoute(path: '/admin/users', builder: (c, s) => const UsersOfficesScreen()),
-      GoRoute(path: '/settings', builder: (c, s) => const SettingsScreen()),
-      GoRoute(path: '/unauthorized', builder: (c, s) => const UnauthorizedScreen()),
+      GoRoute(
+        path: '/reports-analytics',
+        pageBuilder: (c, s) => _noTransition(s, const ReportsScreen()),
+      ),
+      GoRoute(
+        path: '/admin/users',
+        pageBuilder: (c, s) => _noTransition(s, const UsersOfficesScreen()),
+      ),
+      GoRoute(
+        path: '/settings',
+        pageBuilder: (c, s) => _noTransition(s, const SettingsScreen()),
+      ),
+      GoRoute(
+        path: '/unauthorized',
+        pageBuilder: (c, s) => _noTransition(s, const UnauthorizedScreen()),
+      ),
     ],
-    errorBuilder: (c, s) => const UnauthorizedScreen(),
+    errorPageBuilder: (c, s) => _noTransition(s, const UnauthorizedScreen()),
   );
 }

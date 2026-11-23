@@ -45,6 +45,16 @@ ThemeData buildTheme() {
   return base.copyWith(
     scaffoldBackgroundColor: AppColors.canvas,
     textTheme: text,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.iOS: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.windows: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.macOS: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.linux: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: NoAnimationPageTransitionsBuilder(),
+      },
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
@@ -76,3 +86,20 @@ ThemeData buildTheme() {
     ),
   );
 }
+
+/// Disables the default Material 3 zoom/minimize-maximize transition across all screens.
+class NoAnimationPageTransitionsBuilder extends PageTransitionsBuilder {
+  const NoAnimationPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return child;
+  }
+}
+

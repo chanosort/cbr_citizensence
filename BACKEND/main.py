@@ -41,7 +41,16 @@ if DATABASE_URL:
         print('Falling back to SQLite (citizensense.db) so user registration and OTP stay fully operational.\n')
 
 if db_engine is None:
-    sqlite_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'citizensense.db')
+    candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'citizensense.db'),
+        os.path.join(os.getcwd(), 'citizensense.db'),
+        os.path.join(os.getcwd(), 'BACKEND', 'citizensense.db'),
+    ]
+    sqlite_path = candidates[0]
+    for p in candidates:
+        if os.path.exists(p) and os.path.getsize(p) > 10000:
+            sqlite_path = p
+            break
     db_engine = create_engine(f'sqlite:///{sqlite_path}', connect_args={'check_same_thread': False})
     print(f'Using SQLite database at {sqlite_path}')
 
@@ -242,6 +251,54 @@ def seed_defaults():
 
 seed_defaults()
 
+def seed_complaints_if_empty():
+    try:
+        with SessionLocal() as db:
+            count = db.scalar(select(func.count(ComplaintRow.id)))
+            if count == 0:
+                import sqlite3
+                sqlite_candidates = [
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'citizensense.db'),
+                    os.path.join(os.getcwd(), 'citizensense.db'),
+                    os.path.join(os.getcwd(), 'BACKEND', 'citizensense.db'),
+                ]
+                for sp in sqlite_candidates:
+                    if os.path.exists(sp) and os.path.getsize(sp) > 10000:
+                        sconn = sqlite3.connect(sp)
+                        scur = sconn.cursor()
+                        scur.execute("SELECT complaint_id, user_id, office_id, category_id, location_id, risk_level_id, status_id, status, priority, title, description, attachment, response_message, co_office_ids, sentiment, confidence FROM complaints_tbl")
+                        rows = scur.fetchall()
+                        sconn.close()
+                        if rows:
+                            print(f'Auto-seeding {len(rows)} complaints into empty complaints_tbl...')
+                            for r in rows:
+                                c = ComplaintRow(
+                                    id=r[0],
+                                    citizen_id=r[1],
+                                    office_id=r[2],
+                                    category_id=r[3],
+                                    location_id=r[4],
+                                    risk_level_id=r[5],
+                                    status_id=r[6],
+                                    status=r[7],
+                                    priority=r[8],
+                                    title=r[9],
+                                    description=r[10],
+                                    attachment_name=r[11],
+                                    response_message=r[12],
+                                    co_office_ids=r[13],
+                                    sentiment=r[14],
+                                    confidence=r[15]
+                                )
+                                db.add(c)
+                            db.commit()
+                            print('Successfully auto-seeded complaints into complaints_tbl!')
+                        break
+    except Exception as e:
+        print(f'Auto-seed complaints note: {e}')
+
+seed_complaints_if_empty()
+
 def _hash_otp(code: str) -> str:
     return hashlib.sha256(code.encode()).hexdigest()
 
@@ -361,8 +418,8 @@ def iso(dt):
         return dt.isoformat()
     return str(dt)
 
-def complaint_json(c: ComplaintRow, db: Session):
-    u = db.get(User, c.citizen_id)
+def complaint_json(c: ComplaintRow, db: Session, user_obj=None):
+    u = user_obj if user_obj is not None else db.get(User, c.citizen_id)
     co_ids = [int(x) for x in (c.co_office_ids or '').split(',') if x.strip().isdigit()]
     return {
         'id': c.id,
@@ -442,7 +499,16 @@ def home(): return {'message': 'CBR CitizenSense API is running', 'version': '2.
 @app.get('/api/health')
 @app.get('/api/health/db')
 def health(db: Session = Depends(get_db)):
-    db.execute(select(1)); return {'database': 'connected', 'status': 'ok'}
+    db.execute(select(1))
+    c_count = db.scalar(select(func.count(ComplaintRow.id)))
+    u_count = db.scalar(select(func.count(User.id)))
+    return {
+        'database': 'connected',
+        'dialect': engine.dialect.name,
+        'status': 'ok',
+        'complaints_count': c_count,
+        'users_count': u_count,
+    }
 
 # ─── Auth: Register (citizens only) ──────────────────────────────────────────
 
@@ -1015,13 +1081,15 @@ def list_staff(user: User = Depends(current_user), db: Session = Depends(get_db)
             (ComplaintRow.co_office_ids.like(f'%{user_oid}%'))
         ).order_by(ComplaintRow.created_at.desc())
     ))
-    return ok({'items': [complaint_json(c, db) for c in rows]})
+    users_cache = {u.id: u for u in db.scalars(select(User)).all()}
+    return ok({'items': [complaint_json(c, db, users_cache.get(c.citizen_id)) for c in rows]})
 
 @app.get('/api/admin/complaints')
 def list_all(user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_role(user, 'admin')
     rows = list(db.scalars(select(ComplaintRow).order_by(ComplaintRow.created_at.desc())))
-    return ok({'items': [complaint_json(c, db) for c in rows]})
+    users_cache = {u.id: u for u in db.scalars(select(User)).all()}
+    return ok({'items': [complaint_json(c, db, users_cache.get(c.citizen_id)) for c in rows]})
 
 @app.get('/api/complaints/{complaint_id}')
 def complaint_detail(complaint_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -1067,7 +1135,8 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
         cats = {}
         for c in rows: cats[c.category_id] = cats.get(c.category_id, 0) + 1
         total = len(rows)
-        return ok({'pending': pending, 'in_progress': progress, 'solved': solved, 'pending_delta': 0, 'in_progress_delta': 0, 'solved_delta': 0, 'service_level': round(solved * 100 / total, 1) if total else 0, 'service_target': 75, 'feedback_rating': 0, 'chart': {'labels': [], 'pending': [], 'in_progress': []}, 'recent': [complaint_json(c, db) for c in rows[:5]], 'categories': [{'name': f'Category {k}', 'percent': round(v * 100 / total) if total else 0} for k, v in sorted(cats.items(), key=lambda x: -x[1])[:4]]})
+        users_cache = {u.id: u for u in db.scalars(select(User)).all()}
+        return ok({'pending': pending, 'in_progress': progress, 'solved': solved, 'pending_delta': 0, 'in_progress_delta': 0, 'solved_delta': 0, 'service_level': round(solved * 100 / total, 1) if total else 0, 'service_target': 75, 'feedback_rating': 0, 'chart': {'labels': [], 'pending': [], 'in_progress': []}, 'recent': [complaint_json(c, db, users_cache.get(c.citizen_id)) for c in rows[:5]], 'categories': [{'name': f'Category {k}', 'percent': round(v * 100 / total) if total else 0} for k, v in sorted(cats.items(), key=lambda x: -x[1])[:4]]})
     except Exception as e:
         print(f'Dashboard summary error: {e}')
         return ok({'pending': 0, 'in_progress': 0, 'solved': 0, 'pending_delta': 0, 'in_progress_delta': 0, 'solved_delta': 0, 'service_level': 0, 'service_target': 75, 'feedback_rating': 0, 'chart': {'labels': [], 'pending': [], 'in_progress': []}, 'recent': [], 'categories': []})
