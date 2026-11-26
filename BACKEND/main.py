@@ -25,10 +25,11 @@ DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 JWT_SECRET = os.getenv('JWT_SECRET', '').strip()
-SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com').strip()
+SMTP_HOST = (os.getenv('SMTP_HOST') or os.getenv('SMTP_SERVER') or 'smtp.gmail.com').strip()
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_USER = os.getenv('SMTP_USER', '').strip()
 SMTP_PASS = os.getenv('SMTP_PASS', '').replace(' ', '').strip()
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '').strip()
 APP_EMAIL_FROM = os.getenv('APP_EMAIL_FROM', SMTP_USER).strip()
 if not JWT_SECRET:
     raise RuntimeError('JWT_SECRET is missing. Set a long random secret in backend/.env.')
@@ -527,10 +528,38 @@ def require_role(user: User, *roles):
 # ─── Email (SMTP) ─────────────────────────────────────────────────────────────
 
 def _send_email(to: str, subject: str, body: str):
-    """Send a plain-text email via SMTP.
-    If SMTP_USER / SMTP_PASS are not configured or are placeholder values,
-    the OTP is printed prominently to the server console (dev mode fallback).
+    """Send a plain-text email via Brevo HTTP API (if BREVO_API_KEY is set) or SMTP.
+    If neither is configured or placeholder values are used, prints OTP to console.
     """
+    if BREVO_API_KEY:
+        try:
+            import urllib.request
+            from email.utils import parseaddr
+            sender_name, sender_email = parseaddr(APP_EMAIL_FROM or SMTP_USER or 'noreply@citizensense.ph')
+            if not sender_email:
+                sender_email = 'noreply@citizensense.ph'
+            payload = json.dumps({
+                'sender': {'name': sender_name or 'CBR CitizenSense', 'email': sender_email},
+                'to': [{'email': to}],
+                'subject': subject,
+                'textContent': body,
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'https://api.brevo.com/v3/smtp/email',
+                data=payload,
+                headers={
+                    'accept': 'application/json',
+                    'api-key': BREVO_API_KEY,
+                    'content-type': 'application/json',
+                },
+                method='POST',
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                print(f'[BREVO API] Email sent to {to} (status {resp.status})')
+                return
+        except Exception as e:
+            print(f'\n[BREVO API ERROR] Could not send email via Brevo API ({e}). Trying SMTP fallback...')
+
     is_placeholder = (
         not SMTP_USER 
         or not SMTP_PASS 
