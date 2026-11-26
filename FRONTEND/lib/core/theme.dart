@@ -87,6 +87,81 @@ ThemeData buildTheme() {
   );
 }
 
+ThemeData buildDarkTheme() {
+  const darkBg = Color(0xFF0F172A);
+  const darkCard = Color(0xFF1E293B);
+  const darkBorder = Color(0xFF334155);
+  const darkInk = Color(0xFFF1F5F9);
+  const darkMuted = Color(0xFF94A3B8);
+
+  final scheme = ColorScheme.fromSeed(
+    seedColor: AppColors.seal,
+    brightness: Brightness.dark,
+  ).copyWith(
+    primary: AppColors.seal,
+    onPrimary: Colors.white,
+    secondary: AppColors.lime,
+    tertiary: AppColors.gold,
+    error: AppColors.star,
+    surface: darkCard,
+  );
+  final base = ThemeData(useMaterial3: true, colorScheme: scheme, brightness: Brightness.dark);
+  final text = GoogleFonts.plusJakartaSansTextTheme(base.textTheme).apply(
+    bodyColor: darkInk,
+    displayColor: darkInk,
+  );
+
+  OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: c, width: w),
+      );
+
+  return base.copyWith(
+    scaffoldBackgroundColor: darkBg,
+    cardColor: darkCard,
+    textTheme: text,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.iOS: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.windows: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.macOS: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.linux: NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: NoAnimationPageTransitionsBuilder(),
+      },
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: darkCard,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: border(darkBorder),
+      enabledBorder: border(darkBorder),
+      focusedBorder: border(AppColors.seal, 1.8),
+      errorBorder: border(AppColors.star),
+      focusedErrorBorder: border(AppColors.star, 1.8),
+      labelStyle: const TextStyle(color: darkMuted),
+      helperStyle: const TextStyle(color: darkMuted),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.seal,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 50),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700, fontSize: 15),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.seal,
+        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+}
+
 /// Disables the default Material 3 zoom/minimize-maximize transition across all screens.
 class NoAnimationPageTransitionsBuilder extends PageTransitionsBuilder {
   const NoAnimationPageTransitionsBuilder();

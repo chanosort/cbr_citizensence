@@ -1,15 +1,24 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Production/Live default: connects to the real backend with real OTP and database.
 const bool kUseMockApi = false;
 
 /// Auto-detects the right API URL:
-/// Default: Live Render Backend ('https://citizensense-backend.onrender.com')
-/// Can also be overridden at build-time: --dart-define=API_BASE_URL=https://...
-const String kApiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://citizensense-backend.onrender.com',
-);
+/// - If explicitly set via --dart-define=API_BASE_URL=..., use it.
+/// - If running in local web browser (localhost or 127.0.0.1), connect to local backend at http://localhost:8000.
+/// - Otherwise, connect to live Render backend ('https://citizensense-backend.onrender.com').
+String get kApiBaseUrl {
+  const envUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  if (envUrl.isNotEmpty) return envUrl;
+  if (kIsWeb) {
+    final host = Uri.base.host;
+    if (host == 'localhost' || host == '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+  }
+  return 'https://citizensense-backend.onrender.com';
+}
 
 enum UserRole { citizen, staff, admin }
 
@@ -116,18 +125,37 @@ class Barangay {
   const Barangay(this.id, this.name);
 }
 
-// SAMPLE ONLY - replace with locations_tbl from IT 108.
+// All 31 official barangays of Cabadbaran City, Agusan del Norte.
 const kBarangays = <Barangay>[
-  Barangay(1, 'Poblacion 1'),
-  Barangay(2, 'Poblacion 2'),
-  Barangay(3, 'Poblacion 3'),
-  Barangay(4, 'Calamba'),
-  Barangay(5, 'Comagascas'),
-  Barangay(6, 'Del Pilar'),
-  Barangay(7, 'Katugasan'),
-  Barangay(8, 'La Union'),
-  Barangay(9, 'Mabini'),
-  Barangay(10, 'Paraiso'),
-  Barangay(11, 'Soriano'),
-  Barangay(12, 'Zamora'),
+  Barangay(1, 'Antonio Luna'),
+  Barangay(2, 'Bay-ang'),
+  Barangay(3, 'Bayabas'),
+  Barangay(4, 'Caasinan'),
+  Barangay(5, 'Cabinet'),
+  Barangay(6, 'Calamba'),
+  Barangay(7, 'Calibunan'),
+  Barangay(8, 'Comagascas'),
+  Barangay(9, 'Concepcion'),
+  Barangay(10, 'Del Pilar'),
+  Barangay(11, 'Katugasan'),
+  Barangay(12, 'Kauswagan'),
+  Barangay(13, 'La Union'),
+  Barangay(14, 'Mabini'),
+  Barangay(15, 'Mahaba'),
+  Barangay(16, 'Poblacion 1'),
+  Barangay(17, 'Poblacion 2'),
+  Barangay(18, 'Poblacion 3'),
+  Barangay(19, 'Poblacion 4'),
+  Barangay(20, 'Poblacion 5'),
+  Barangay(21, 'Poblacion 6'),
+  Barangay(22, 'Poblacion 7'),
+  Barangay(23, 'Poblacion 8'),
+  Barangay(24, 'Poblacion 9'),
+  Barangay(25, 'Poblacion 10'),
+  Barangay(26, 'Poblacion 11'),
+  Barangay(27, 'Poblacion 12'),
+  Barangay(28, 'Puting Bato'),
+  Barangay(29, 'Sanghan'),
+  Barangay(30, 'Soriano'),
+  Barangay(31, 'Tolosa'),
 ];

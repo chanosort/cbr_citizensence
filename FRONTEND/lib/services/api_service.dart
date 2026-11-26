@@ -73,8 +73,50 @@ abstract class ApiService {
   Future<ReportData> report(ReportFilter filter); // EP-08
   Future<List<UserRecord>> adminUsers();
   Future<void> setUserActive(int id, bool active);
+  Future<void> createStaffUser({
+    required String name,
+    required String email,
+    required String password,
+    required int officeId,
+    String? username,
+  });
+  Future<void> updateStaffUser({
+    required int id,
+    String? name,
+    int? officeId,
+    bool? active,
+    String? password,
+  });
+  Future<void> deleteStaffUser(int id);
+  Future<List<AnnouncementItem>> publicAnnouncements();
+  Future<List<AnnouncementItem>> announcements();
+  Future<AnnouncementItem> createAnnouncement({
+    required String title,
+    required String content,
+    String category = 'Announcement',
+  });
+  Future<AnnouncementItem> updateAnnouncement({
+    required int id,
+    String? title,
+    String? content,
+    String? category,
+    String? status,
+    bool? isActive,
+  });
+  Future<void> deleteAnnouncement(int id);
   Future<List<OfficeSummary>> adminOffices();
   Future<List<AppNotice>> notifications();
+  Future<void> markNotificationsRead();
+  Future<List<int>> downloadReportCsvBytes({int days = 30, String? month, int? officeId, int? categoryId});
+  Future<List<int>> downloadMyComplaintsCsvBytes();
+  Future<ComplaintMessage> postComplaintMessage({required int complaintId, required String message});
+  Future<void> submitComplaintFeedback({required int complaintId, required int rating, String? comment});
+  Future<AppUser> updateProfile({required String name});
+  Future<AppUser> uploadAvatar(List<int> bytes, String fileName);
+  Future<void> requestEmailChange({required String currentPassword, required String newEmail});
+  Future<AppUser> confirmEmailChange({required String newEmail, required String code});
+  Future<List<ActivityLogItem>> adminActivityLogs({String? role});
+  String getAvatarUrl(String? avatarUrl);
   String getAttachmentUrl(int complaintId);
   Map<String, String> get authHeaders;
 }
@@ -154,6 +196,8 @@ class HttpApiService implements ApiService {
       _send(() => http.post(_u(path), headers: _headers, body: jsonEncode(body)));
   Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) =>
       _send(() => http.patch(_u(path), headers: _headers, body: jsonEncode(body)));
+  Future<Map<String, dynamic>> _delete(String path) =>
+      _send(() => http.delete(_u(path), headers: _headers));
 
   List<Map<String, dynamic>> _items(Map<String, dynamic> d) =>
       ((d['items'] as List?) ?? const []).map((e) => (e as Map).cast<String, dynamic>()).toList();
@@ -323,6 +367,91 @@ class HttpApiService implements ApiService {
     await _patch('/api/admin/users/$id', {'active': active});
   }
 
+  @override
+  Future<void> createStaffUser({
+    required String name,
+    required String email,
+    required String password,
+    required int officeId,
+    String? username,
+  }) async {
+    await _post('/api/admin/users', {
+      'name': name,
+      'email': email,
+      'password': password,
+      'role': 'staff',
+      'office_id': officeId,
+      if (username != null && username.isNotEmpty) 'username': username,
+    });
+  }
+
+  @override
+  Future<void> updateStaffUser({
+    required int id,
+    String? name,
+    int? officeId,
+    bool? active,
+    String? password,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (officeId != null) body['office_id'] = officeId;
+    if (active != null) body['active'] = active;
+    if (password != null && password.isNotEmpty) body['password'] = password;
+    await _patch('/api/admin/users/$id', body);
+  }
+
+  @override
+  Future<void> deleteStaffUser(int id) async {
+    await _delete('/api/admin/users/$id');
+  }
+
+  @override
+  Future<List<AnnouncementItem>> publicAnnouncements() async =>
+      _items(await _get('/api/announcements/public')).map(AnnouncementItem.fromJson).toList();
+
+  @override
+  Future<List<AnnouncementItem>> announcements() async =>
+      _items(await _get('/api/announcements')).map(AnnouncementItem.fromJson).toList();
+
+  @override
+  Future<AnnouncementItem> createAnnouncement({
+    required String title,
+    required String content,
+    String category = 'Announcement',
+  }) async {
+    final d = await _post('/api/announcements', {
+      'title': title,
+      'content': content,
+      'category': category,
+    });
+    return AnnouncementItem.fromJson((d['item'] as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<AnnouncementItem> updateAnnouncement({
+    required int id,
+    String? title,
+    String? content,
+    String? category,
+    String? status,
+    bool? isActive,
+  }) async {
+    final body = <String, dynamic>{};
+    if (title != null) body['title'] = title;
+    if (content != null) body['content'] = content;
+    if (category != null) body['category'] = category;
+    if (status != null) body['status'] = status;
+    if (isActive != null) body['is_active'] = isActive;
+    final d = await _patch('/api/announcements/$id', body);
+    return AnnouncementItem.fromJson((d['item'] as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<void> deleteAnnouncement(int id) async {
+    await _delete('/api/announcements/$id');
+  }
+
   /// NEW: GET /api/admin/offices
   @override
   Future<List<OfficeSummary>> adminOffices() async =>
@@ -332,6 +461,101 @@ class HttpApiService implements ApiService {
   @override
   Future<List<AppNotice>> notifications() async =>
       _items(await _get('/api/notifications')).map(AppNotice.fromJson).toList();
+
+  /// NEW: PATCH /api/notifications/read
+  @override
+  Future<void> markNotificationsRead() async {
+    await _patch('/api/notifications/read', {});
+  }
+
+  /// NEW: GET /api/reports/export-csv
+  @override
+  Future<List<int>> downloadReportCsvBytes({int days = 30, String? month, int? officeId, int? categoryId}) async {
+    final q = <String, String>{'days': '$days'};
+    if (month != null && month.isNotEmpty) q['month'] = month;
+    if (officeId != null) q['office_id'] = '$officeId';
+    if (categoryId != null) q['category_id'] = '$categoryId';
+    final uri = _u('/api/reports/export-csv', q);
+    final res = await http.get(uri, headers: _headers);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return res.bodyBytes;
+    }
+    throw ApiException(res.statusCode, 'EXPORT_FAILED', 'Failed to export report CSV.');
+  }
+
+  @override
+  Future<List<int>> downloadMyComplaintsCsvBytes() async {
+    final uri = _u('/api/complaints/export-csv');
+    final res = await http.get(uri, headers: _headers);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return res.bodyBytes;
+    }
+    throw ApiException(res.statusCode, 'EXPORT_FAILED', 'Failed to export your complaints CSV.');
+  }
+
+  @override
+  Future<ComplaintMessage> postComplaintMessage({required int complaintId, required String message}) async {
+    final d = await _post('/api/complaints/$complaintId/messages', {'message': message});
+    return ComplaintMessage.fromJson(d);
+  }
+
+  @override
+  Future<void> submitComplaintFeedback({required int complaintId, required int rating, String? comment}) async {
+    await _post('/api/complaints/$complaintId/feedback', {
+      'rating': rating,
+      if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+    });
+  }
+
+  @override
+  Future<AppUser> updateProfile({required String name}) async {
+    final d = await _patch('/api/auth/profile', {'name': name});
+    return AppUser.fromJson((d['user'] as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<AppUser> uploadAvatar(List<int> bytes, String fileName) async {
+    final req = http.MultipartRequest('POST', _u('/api/auth/avatar'));
+    if (_token != null) req.headers['Authorization'] = 'Bearer $_token';
+    req.files.add(http.MultipartFile.fromBytes('avatar', bytes, filename: fileName));
+    final streamed = await req.send().timeout(const Duration(seconds: 25));
+    final r = await http.Response.fromStream(streamed);
+    final d = await _send(() async => r);
+    return AppUser.fromJson((d['user'] as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<void> requestEmailChange({required String currentPassword, required String newEmail}) async {
+    await _post('/api/auth/email-change/request', {
+      'current_password': currentPassword,
+      'new_email': newEmail,
+    });
+  }
+
+  @override
+  Future<AppUser> confirmEmailChange({required String newEmail, required String code}) async {
+    final d = await _post('/api/auth/email-change/confirm', {
+      'new_email': newEmail,
+      'code': code,
+    });
+    return AppUser.fromJson((d['user'] as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<List<ActivityLogItem>> adminActivityLogs({String? role}) async {
+    final q = <String, String>{};
+    if (role != null && role.isNotEmpty) q['role'] = role;
+    return _items(await _get('/api/admin/activity-logs', q.isEmpty ? null : q))
+        .map(ActivityLogItem.fromJson)
+        .toList();
+  }
+
+  @override
+  String getAvatarUrl(String? avatarUrl) {
+    if (avatarUrl == null || avatarUrl.isEmpty) return '';
+    if (avatarUrl.startsWith('http')) return avatarUrl;
+    return '$baseUrl$avatarUrl';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +686,62 @@ class MockApiService implements ApiService {
 
   @override
   String getAttachmentUrl(int complaintId) => '';
+
+  @override
+  Future<void> markNotificationsRead() async {}
+
+  @override
+  Future<List<int>> downloadReportCsvBytes({int days = 30, String? month, int? officeId, int? categoryId}) async {
+    await _lag();
+    return utf8.encode('ID,Date,Title,Office,Status\n1,2026-11-23,Sample,Mayor,submitted\n');
+  }
+
+  @override
+  Future<List<int>> downloadMyComplaintsCsvBytes() async {
+    await _lag();
+    return utf8.encode('ID,Date,Title,Office,Status\n');
+  }
+
+  @override
+  Future<ComplaintMessage> postComplaintMessage({required int complaintId, required String message}) async {
+    await _lag();
+    return ComplaintMessage(id: 1, senderRole: _me?.role.name ?? 'citizen', senderName: _me?.name ?? 'User', message: message, createdAt: DateTime.now());
+  }
+
+  @override
+  Future<void> submitComplaintFeedback({required int complaintId, required int rating, String? comment}) async {
+    await _lag();
+  }
+
+  @override
+  Future<AppUser> updateProfile({required String name}) async {
+    await _lag();
+    return AppUser(id: _me?.id ?? 1, name: name, email: _me?.email ?? '', role: _me?.role ?? UserRole.citizen);
+  }
+
+  @override
+  Future<AppUser> uploadAvatar(List<int> bytes, String fileName) async {
+    await _lag();
+    return _me ?? const AppUser(id: 1, name: 'User', email: '', role: UserRole.citizen);
+  }
+
+  @override
+  Future<void> requestEmailChange({required String currentPassword, required String newEmail}) async => _lag();
+
+  @override
+  Future<AppUser> confirmEmailChange({required String newEmail, required String code}) async {
+    await _lag();
+    return AppUser(id: _me?.id ?? 1, name: _me?.name ?? 'User', email: newEmail, role: _me?.role ?? UserRole.citizen);
+  }
+
+  @override
+  Future<List<ActivityLogItem>> adminActivityLogs({String? role}) async {
+    await _lag();
+    return const [];
+  }
+
+  @override
+  String getAvatarUrl(String? avatarUrl) => '';
 
   @override
   Future<AuthSession> login({required String email, required String password}) async {
@@ -850,6 +1130,89 @@ class MockApiService implements ApiService {
       }
     }
     throw const ApiException(404, 'NOT_FOUND', 'User not found.');
+  }
+
+  @override
+  Future<void> createStaffUser({
+    required String name,
+    required String email,
+    required String password,
+    required int officeId,
+    String? username,
+  }) async {
+    await _lag(300);
+  }
+
+  @override
+  Future<void> updateStaffUser({
+    required int id,
+    String? name,
+    int? officeId,
+    bool? active,
+    String? password,
+  }) async {
+    await _lag(300);
+  }
+
+  @override
+  Future<void> deleteStaffUser(int id) async {
+    await _lag(300);
+  }
+
+  @override
+  Future<List<AnnouncementItem>> publicAnnouncements() async => const [];
+
+  @override
+  Future<List<AnnouncementItem>> announcements() async => const [];
+
+  @override
+  Future<AnnouncementItem> createAnnouncement({
+    required String title,
+    required String content,
+    String category = 'Announcement',
+  }) async {
+    await _lag(300);
+    return AnnouncementItem(
+      id: 1,
+      title: title,
+      content: content,
+      category: category,
+      status: 'approved',
+      isActive: true,
+      createdById: 1,
+      createdByName: 'Admin',
+      createdByRole: 'admin',
+      createdAt: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<AnnouncementItem> updateAnnouncement({
+    required int id,
+    String? title,
+    String? content,
+    String? category,
+    String? status,
+    bool? isActive,
+  }) async {
+    await _lag(300);
+    return AnnouncementItem(
+      id: id,
+      title: title ?? '',
+      content: content ?? '',
+      category: category ?? 'Announcement',
+      status: status ?? 'approved',
+      isActive: isActive ?? true,
+      createdById: 1,
+      createdByName: 'Admin',
+      createdByRole: 'admin',
+      createdAt: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<void> deleteAnnouncement(int id) async {
+    await _lag(300);
   }
 
   @override

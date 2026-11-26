@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants.dart';
-import '../core/format.dart';
+import '../core/file_download_helper.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -21,12 +20,13 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   static const _ranges = {7: 'Last 7 days', 14: 'Last 14 days', 30: 'Last 30 days', 90: 'Last 90 days', 0: 'All time'};
-  int _days = 30;
+  int _days = 0; // default to All time to show all 2,030 complaints
   int? _officeId;
   int? _categoryId;
   ReportData? _data;
   String? _error;
   bool _loading = true;
+  bool _exporting = false;
   int _reqId = 0;
 
   @override
@@ -64,34 +64,130 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  String _csv(List<Complaint> rows) {
-    String q(String s) {
-      final esc = s.replaceAll('"', '""');
-      return '"$esc"';
-    }
+  Future<void> _downloadReport() async {
+    final now = DateTime.now();
+    String mode = _days == 0 ? 'all' : 'days';
+    int selectedDays = _days == 0 ? 30 : _days;
+    String selectedMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    int? selectedOffice = _officeId;
 
-    final b = StringBuffer('id,date,title,category,office,priority,status,sentiment\n');
-    for (final c in rows) {
-      b.writeln([
-        c.id,
-        q(fmtDate(c.createdAt)),
-        q(c.title),
-        q(categoryById(c.categoryId).name),
-        q(officeById(c.officeId).name),
-        c.priority.name,
-        c.status.apiName,
-        c.sentiment,
-      ].join(','));
-    }
-    return b.toString();
-  }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.download_rounded, color: AppColors.navy),
+            SizedBox(width: 8),
+            Text('Export CSV Report', style: TextStyle(fontWeight: FontWeight.w800)),
+          ]),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: mode,
+                  decoration: const InputDecoration(labelText: 'Report Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Time (All Complaints)')),
+                    DropdownMenuItem(value: 'monthly', child: Text('Monthly Report (Pick Month)')),
+                    DropdownMenuItem(value: 'days', child: Text('Recent Range (Last N Days)')),
+                  ],
+                  onChanged: (v) => setS(() => mode = v ?? 'all'),
+                ),
+                if (mode == 'monthly') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedMonth,
+                    decoration: const InputDecoration(labelText: 'Select Month'),
+                    items: List.generate(18, (i) {
+                      final d = DateTime(now.year, now.month - i, 1);
+                      final ym = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+                      const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                      return DropdownMenuItem(value: ym, child: Text('${mNames[d.month - 1]} ${d.year} ($ym)'));
+                    }),
+                    onChanged: (v) => setS(() => selectedMonth = v ?? selectedMonth),
+                  ),
+                ],
+                if (mode == 'days') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedDays,
+                    decoration: const InputDecoration(labelText: 'Range'),
+                    items: const [
+                      DropdownMenuItem(value: 7, child: Text('Last 7 days')),
+                      DropdownMenuItem(value: 14, child: Text('Last 14 days')),
+                      DropdownMenuItem(value: 30, child: Text('Last 30 days')),
+                      DropdownMenuItem(value: 90, child: Text('Last 90 days')),
+                    ],
+                    onChanged: (v) => setS(() => selectedDays = v ?? 30),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int?>(
+                  initialValue: selectedOffice,
+                  decoration: const InputDecoration(labelText: 'Office Scope'),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('All Offices (All Complaints)')),
+                    for (final o in kOffices)
+                      DropdownMenuItem<int?>(value: o.id, child: Text(o.name, overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (v) => setS(() => selectedOffice = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Download CSV'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
 
-  Future<void> _copyCsv() async {
-    final d = _data;
-    if (d == null || d.rows.isEmpty) return;
+    final api = context.read<ApiService>();
     final messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(ClipboardData(text: _csv(d.rows)));
-    messenger.showSnackBar(SnackBar(content: Text('Copied ${d.rows.length} rows as CSV. Paste into Excel or Sheets.')));
+    setState(() => _exporting = true);
+    try {
+      final exportDays = mode == 'all' ? 0 : (mode == 'days' ? selectedDays : 0);
+      final exportMonth = mode == 'monthly' ? selectedMonth : null;
+      final bytes = await api.downloadReportCsvBytes(
+        days: exportDays,
+        month: exportMonth,
+        officeId: selectedOffice,
+        categoryId: _categoryId,
+      );
+      final scopeTag = selectedOffice == null ? 'AllOffices' : officeById(selectedOffice!).shortName.replaceAll(' ', '');
+      final periodTag = exportMonth ?? (exportDays == 0 ? 'AllTime' : '${exportDays}days');
+      final fileName = 'CitizenSense_Report_${periodTag}_$scopeTag.csv';
+      downloadFileFromBytes(bytes, fileName);
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+          backgroundColor: AppColors.forest,
+          content: Row(children: [
+            const Icon(Icons.download_done_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Report downloaded as "$fileName"')),
+          ]),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+          backgroundColor: AppColors.star,
+          content: Text('Download failed: $e'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -124,6 +220,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _filters() {
+    final hasData = _data != null && _data!.total > 0;
     return Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
       SizedBox(
         width: 180,
@@ -133,7 +230,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           decoration: const InputDecoration(labelText: 'Period', isDense: true),
           items: _ranges.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
           onChanged: (v) {
-            _days = v ?? 30;
+            _days = v ?? 0;
             _load();
           },
         ),
@@ -173,10 +270,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
           },
         ),
       ),
-      OutlinedButton.icon(
-        onPressed: (_data == null || _data!.rows.isEmpty) ? null : _copyCsv,
-        icon: const Icon(Icons.copy_all_rounded, size: 18),
-        label: const Text('Copy as CSV'),
+      FilledButton.icon(
+        onPressed: hasData && !_exporting ? _downloadReport : null,
+        icon: _exporting
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.download_rounded, size: 18),
+        label: Text(_exporting ? 'Generating...' : 'Download Report'),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.navy,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        ),
       ),
     ]);
   }
@@ -214,7 +318,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     if (d.total == 0) {
       return [
-        card('No data', const Text('No complaints match these filters. Try a longer period.',
+        card('No data', const Text('No complaints match these filters. Try a longer period or select "All time".',
             style: TextStyle(color: AppColors.muted))),
       ];
     }
@@ -253,7 +357,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }),
       const SizedBox(height: 18),
       LayoutBuilder(builder: (context, box) {
-        final a = card('By category', BarList(items: [for (final e in d.byCategory) (e.label, e.count, null)], color: AppColors.seal));
+        final a = card('By complaint type', BarList(items: [for (final e in d.byCategory) (e.label, e.count, null)], color: AppColors.seal));
         final b = card('By office', BarList(items: [for (final e in d.byOffice) (e.label, e.count, null)], color: AppColors.forest));
         if (box.maxWidth >= 820) {
           return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -266,9 +370,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }),
       const SizedBox(height: 18),
       card(
-        'Latest complaints in this report',
+        'Complaints in this report (${d.total} total)',
         Column(children: [
-          for (final c in d.rows.take(8)) ...[
+          for (final c in d.rows.take(15)) ...[
             InkWell(
               onTap: () => context.go('/complaints/${c.id}'),
               child: Padding(
@@ -288,11 +392,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const Divider(height: 1, color: AppColors.line),
           ],
-          if (d.rows.length > 8)
+          if (d.rows.length > 15)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text('+ ${d.rows.length - 8} more. Use "Copy as CSV" to get every row.',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12.5)),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 15, color: AppColors.muted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '+ ${d.rows.length - 15} more complaints. Click "Download Report" to export all ${d.total} rows as a formatted CSV.',
+                      style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                    ),
+                  ),
+                ],
+              ),
             ),
         ]),
       ),

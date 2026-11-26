@@ -12,6 +12,7 @@ class AppUser {
   final String email;
   final UserRole role;
   final int? officeId; // staff only: assigned office
+  final String? avatarUrl;
 
   const AppUser({
     required this.id,
@@ -20,6 +21,7 @@ class AppUser {
     required this.email,
     required this.role,
     this.officeId,
+    this.avatarUrl,
   });
 
   String get firstName {
@@ -43,6 +45,7 @@ class AppUser {
         role: UserRole.values.firstWhere((r) => r.name == j['role'],
             orElse: () => UserRole.citizen),
         officeId: (j['office_id'] as num?)?.toInt(),
+        avatarUrl: j['avatar_url'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -52,6 +55,7 @@ class AppUser {
         'email': email,
         'role': role.name,
         if (officeId != null) 'office_id': officeId,
+        if (avatarUrl != null) 'avatar_url': avatarUrl,
       };
 }
 
@@ -95,9 +99,9 @@ ComplaintStatus statusFrom(String? s) => ComplaintStatus.values.firstWhere(
 
 /// Legal status transitions (used by EP-07; the server enforces them too with 409).
 List<ComplaintStatus> allowedNext(ComplaintStatus s) => switch (s) {
-      ComplaintStatus.submitted => const [ComplaintStatus.received, ComplaintStatus.inProgress],
-      ComplaintStatus.received => const [ComplaintStatus.inProgress, ComplaintStatus.resolved],
-      ComplaintStatus.inProgress => const [ComplaintStatus.resolved],
+      ComplaintStatus.submitted => const [ComplaintStatus.received, ComplaintStatus.inProgress, ComplaintStatus.closed],
+      ComplaintStatus.received => const [ComplaintStatus.inProgress, ComplaintStatus.resolved, ComplaintStatus.closed],
+      ComplaintStatus.inProgress => const [ComplaintStatus.resolved, ComplaintStatus.closed],
       ComplaintStatus.resolved => const [ComplaintStatus.closed, ComplaintStatus.inProgress],
       ComplaintStatus.closed => const <ComplaintStatus>[],
     };
@@ -160,6 +164,9 @@ class Complaint {
   final String? attachmentName;
   final String? attachmentUrl;
   final List<int> coOfficeIds;
+  final int? rating;
+  final String? feedbackComment;
+  final DateTime? feedbackAt;
 
   bool get hasAttachment => attachmentName != null && attachmentName!.trim().isNotEmpty;
 
@@ -189,9 +196,19 @@ class Complaint {
     this.attachmentName,
     this.attachmentUrl,
     this.coOfficeIds = const [],
+    this.rating,
+    this.feedbackComment,
+    this.feedbackAt,
   });
 
-  Complaint copyWith({ComplaintStatus? status, String? attachmentName, String? attachmentUrl}) => Complaint(
+  Complaint copyWith({
+    ComplaintStatus? status,
+    String? attachmentName,
+    String? attachmentUrl,
+    int? rating,
+    String? feedbackComment,
+  }) =>
+      Complaint(
         id: id,
         title: title,
         description: description,
@@ -207,6 +224,9 @@ class Complaint {
         attachmentName: attachmentName ?? this.attachmentName,
         attachmentUrl: attachmentUrl ?? this.attachmentUrl,
         coOfficeIds: coOfficeIds,
+        rating: rating ?? this.rating,
+        feedbackComment: feedbackComment ?? this.feedbackComment,
+        feedbackAt: feedbackAt,
       );
 
   factory Complaint.fromJson(Map<String, dynamic> j) => Complaint(
@@ -227,6 +247,9 @@ class Complaint {
         coOfficeIds: ((j['co_office_ids'] as List?) ?? const [])
             .map((e) => (e as num).toInt())
             .toList(),
+        rating: (j['rating'] as num?)?.toInt(),
+        feedbackComment: j['feedback_comment'] as String?,
+        feedbackAt: j['feedback_at'] != null ? _dt(j['feedback_at']) : null,
       );
 }
 
@@ -258,7 +281,64 @@ class HistoryEntry {
       );
 }
 
-/// EP-05: complaint + ML result + responses + status history.
+class ComplaintMessage {
+  final int id;
+  final String senderRole;
+  final String senderName;
+  final String message;
+  final DateTime createdAt;
+
+  const ComplaintMessage({
+    required this.id,
+    required this.senderRole,
+    required this.senderName,
+    required this.message,
+    required this.createdAt,
+  });
+
+  factory ComplaintMessage.fromJson(Map<String, dynamic> j) => ComplaintMessage(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        senderRole: (j['sender_role'] as String?) ?? 'citizen',
+        senderName: (j['sender_name'] as String?) ?? 'User',
+        message: (j['message'] as String?) ?? '',
+        createdAt: _dt(j['created_at']),
+      );
+}
+
+class ActivityLogItem {
+  final int id;
+  final String actorName;
+  final String actorRole;
+  final String action;
+  final String summary;
+  final String? targetType;
+  final int? targetId;
+  final DateTime createdAt;
+
+  const ActivityLogItem({
+    required this.id,
+    required this.actorName,
+    required this.actorRole,
+    required this.action,
+    required this.summary,
+    this.targetType,
+    this.targetId,
+    required this.createdAt,
+  });
+
+  factory ActivityLogItem.fromJson(Map<String, dynamic> j) => ActivityLogItem(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        actorName: (j['actor_name'] as String?) ?? 'System',
+        actorRole: (j['actor_role'] as String?) ?? 'system',
+        action: (j['action'] as String?) ?? '',
+        summary: (j['summary'] as String?) ?? '',
+        targetType: j['target_type'] as String?,
+        targetId: (j['target_id'] as num?)?.toInt(),
+        createdAt: _dt(j['created_at']),
+      );
+}
+
+/// EP-05: complaint + ML result + responses + status history + follow-up messages.
 class ComplaintDetail {
   final Complaint complaint;
   final String locationName;
@@ -266,6 +346,7 @@ class ComplaintDetail {
   final List<String> keywords;
   final List<ResponseEntry> responses;
   final List<HistoryEntry> history;
+  final List<ComplaintMessage> messages;
 
   const ComplaintDetail({
     required this.complaint,
@@ -274,6 +355,7 @@ class ComplaintDetail {
     required this.keywords,
     required this.responses,
     required this.history,
+    this.messages = const [],
   });
 
   factory ComplaintDetail.fromJson(Map<String, dynamic> j) => ComplaintDetail(
@@ -286,6 +368,9 @@ class ComplaintDetail {
             .toList(),
         history: ((j['history'] as List?) ?? const [])
             .map((e) => HistoryEntry.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
+        messages: ((j['messages'] as List?) ?? const [])
+            .map((e) => ComplaintMessage.fromJson((e as Map).cast<String, dynamic>()))
             .toList(),
       );
 }
@@ -439,11 +524,55 @@ class AppNotice {
   final String text;
   final DateTime at;
   final int? complaintId;
-  const AppNotice(this.text, this.at, this.complaintId);
+  final bool isRead;
+  const AppNotice(this.text, this.at, this.complaintId, {this.isRead = false});
 
   factory AppNotice.fromJson(Map<String, dynamic> j) => AppNotice(
         (j['text'] as String?) ?? '',
         _dt(j['at']),
         (j['complaint_id'] as num?)?.toInt(),
+        isRead: (j['is_read'] as bool?) ?? false,
+      );
+}
+
+class AnnouncementItem {
+  final int id;
+  final String title;
+  final String content;
+  final String category;
+  final String status; // 'approved' | 'pending' | 'rejected'
+  final bool isActive;
+  final int createdById;
+  final String createdByName;
+  final String createdByRole;
+  final String? reviewedByName;
+  final DateTime createdAt;
+
+  const AnnouncementItem({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.category,
+    required this.status,
+    required this.isActive,
+    required this.createdById,
+    required this.createdByName,
+    required this.createdByRole,
+    this.reviewedByName,
+    required this.createdAt,
+  });
+
+  factory AnnouncementItem.fromJson(Map<String, dynamic> j) => AnnouncementItem(
+        id: (j['id'] as num).toInt(),
+        title: (j['title'] as String?) ?? '',
+        content: (j['content'] as String?) ?? '',
+        category: (j['category'] as String?) ?? 'Announcement',
+        status: (j['status'] as String?) ?? 'approved',
+        isActive: (j['is_active'] as bool?) ?? true,
+        createdById: (j['created_by_id'] as num?)?.toInt() ?? 0,
+        createdByName: (j['created_by_name'] as String?) ?? 'Admin',
+        createdByRole: (j['created_by_role'] as String?) ?? 'admin',
+        reviewedByName: j['reviewed_by_name'] as String?,
+        createdAt: _dt(j['created_at']),
       );
 }

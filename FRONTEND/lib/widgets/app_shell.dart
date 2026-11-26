@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../core/format.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import 'announcement_slideshow.dart';
 import 'seal_logo.dart';
 
 class NavItem {
@@ -45,7 +46,7 @@ List<NavItem> navFor(UserRole role) {
 
 /// Blue sidebar + top bar, like the reference dashboard. Becomes a drawer on
 /// narrow screens.
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.title,
@@ -55,6 +56,31 @@ class AppShell extends StatelessWidget {
   final String title;
   final String activeLabel;
   final Widget child;
+
+  /// Tracks user IDs that already saw the login announcement popup this session.
+  static final Set<int> _announcedUsers = <int>{};
+
+  static void resetAnnouncementsSession() => _announcedUsers.clear();
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final user = context.read<AuthProvider>().user;
+      if (user != null &&
+          user.role == UserRole.citizen &&
+          !AppShell._announcedUsers.contains(user.id)) {
+        AppShell._announcedUsers.add(user.id);
+        showCitizenAnnouncementsDialog(context);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,21 +93,21 @@ class AppShell extends StatelessWidget {
       }
       final wide = box.maxWidth >= 960;
       final content = Column(children: [
-        _TopBar(title: title, user: user, showMenu: !wide),
-        Expanded(child: child),
+        _TopBar(title: widget.title, user: user, showMenu: !wide),
+        Expanded(child: widget.child),
       ]);
       return Scaffold(
         drawer: wide
             ? null
             : Drawer(
                 backgroundColor: AppColors.navy,
-                child: _Sidebar(user: user, activeLabel: activeLabel, inDrawer: true),
+                child: _Sidebar(user: user, activeLabel: widget.activeLabel, inDrawer: true),
               ),
         body: wide
             ? Row(children: [
                 SizedBox(
                     width: 260,
-                    child: _Sidebar(user: user, activeLabel: activeLabel, inDrawer: false)),
+                    child: _Sidebar(user: user, activeLabel: widget.activeLabel, inDrawer: false)),
                 Expanded(child: content),
               ])
             : SafeArea(child: content),
@@ -280,52 +306,93 @@ class _BellState extends State<_Bell> {
   void initState() {
     super.initState();
     _load();
+    // Auto-refresh notifications every 30 seconds
+    _startPolling();
+  }
+
+  void _startPolling() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 30));
+      if (!mounted) return false;
+      await _load();
+      return mounted;
+    });
   }
 
   Future<void> _load() async {
     final api = context.read<ApiService>();
     try {
       final r = await api.notifications();
-      if (mounted) setState(() => _items = r);
+      if (mounted) {
+        setState(() {
+          _items = r;
+          if (r.any((n) => !n.isRead)) _seen = false;
+        });
+      }
     } catch (_) {}
   }
 
   void _open() {
     setState(() => _seen = true);
+    // Mark all as read on the server
+    final api = context.read<ApiService>();
+    api.markNotificationsRead().catchError((_) {});
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Row(
+          children: [
+            Icon(Icons.notifications_active_rounded, color: AppColors.navy, size: 22),
+            SizedBox(width: 8),
+            Text('Notifications', style: TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
         content: SizedBox(
-          width: 380,
+          width: 420,
           child: _items.isEmpty
-              ? const Text('No new notifications.', style: TextStyle(color: AppColors.muted))
-              : ListView(shrinkWrap: true, children: [
-                  for (final n in _items)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.notifications_active_outlined, color: AppColors.navy),
-                      title: Text(n.text, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                      subtitle: Text(fmtDate(n.at), style: const TextStyle(fontSize: 12)),
-                      onTap: n.complaintId == null
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline, color: AppColors.muted, size: 20),
+                      SizedBox(width: 8),
+                      Text('No new notifications.', style: TextStyle(color: AppColors.muted)),
+                    ],
+                  ),
+                )
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final n in _items)
+                      _NoticeRow(notice: n, onTap: n.complaintId == null
                           ? null
                           : () {
                               Navigator.of(ctx).pop();
                               context.go('/complaints/${n.complaintId}');
-                            },
-                    ),
-                ]),
+                            }),
+                  ],
+                ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close'))],
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              // Reload after closing so badge resets
+              _load();
+            },
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final count = _seen ? 0 : _items.length;
+    final count = _seen ? 0 : _items.where((n) => !n.isRead).length;
     return Stack(clipBehavior: Clip.none, children: [
       IconButton(
         tooltip: 'Notifications',
@@ -344,5 +411,48 @@ class _BellState extends State<_Bell> {
           ),
         ),
     ]);
+  }
+}
+
+class _NoticeRow extends StatelessWidget {
+  const _NoticeRow({required this.notice, this.onTap});
+  final AppNotice notice;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isStatus = notice.text.contains('resolved') || notice.text.contains('processed') || notice.text.contains('received') || notice.text.contains('closed');
+    final icon = isStatus ? Icons.update_rounded : Icons.assignment_add;
+    final color = isStatus ? AppColors.forest : AppColors.navy;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(notice.text, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(fmtDate(notice.at), style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              const Icon(Icons.chevron_right_rounded, color: AppColors.muted, size: 18),
+          ],
+        ),
+      ),
+    );
   }
 }

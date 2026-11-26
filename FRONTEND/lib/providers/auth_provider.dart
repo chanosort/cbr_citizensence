@@ -38,6 +38,17 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> updateUser(AppUser updated) async {
+    user = updated;
+    notifyListeners();
+    if (!kUseMockApi) {
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setString('user', jsonEncode(updated.toJson()));
+      } catch (_) {}
+    }
+  }
+
   Future<void> _clearSaved() async {
     if (kUseMockApi) return;
     try {

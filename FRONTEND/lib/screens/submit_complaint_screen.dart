@@ -108,7 +108,17 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   /// NLP auto-detection: reads the description and auto-fills category + office + priority.
   void _autoDetectFromDescription(String text) {
-    if (text.trim().length < 5) return;
+    if (text.trim().length < 5) {
+      _debounce?.cancel();
+      if (_result != null || _classifying || _classifyError != null) {
+        setState(() {
+          _result = null;
+          _classifying = false;
+          _classifyError = null;
+        });
+      }
+      return;
+    }
 
     // Auto-detect category from text (only if user hasn't manually chosen)
     if (!_categoryManuallySet) {
@@ -433,13 +443,37 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
             },
           ),
           space,
-          DropdownButtonFormField<int>(
+          FormField<int>(
             initialValue: _locationId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Barangay / location *'),
-            items: kBarangays.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))).toList(),
-            onChanged: (v) => setState(() => _locationId = v),
-            validator: (v) => v == null ? 'Select where this happened.' : null,
+            validator: (v) => (_locationId == null) ? 'Select where this happened.' : null,
+            builder: (state) {
+              final selected = _locationId == null
+                  ? null
+                  : kBarangays.firstWhere((b) => b.id == _locationId, orElse: () => kBarangays.first);
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  final picked = await _pickBarangayDialog(context, _locationId);
+                  if (picked != null) {
+                    setState(() => _locationId = picked);
+                    state.didChange(picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Barangay / location *',
+                    errorText: state.errorText,
+                    suffixIcon: const Icon(Icons.search_rounded),
+                  ),
+                  child: Text(
+                    selected?.name ?? 'Tap to search & select barangay (31 barangays)',
+                    style: TextStyle(
+                      color: selected == null ? AppColors.muted : null,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
           space,
           DropdownButtonFormField<int>(
@@ -599,4 +633,68 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       ),
     );
   }
+}
+
+Future<int?> _pickBarangayDialog(BuildContext context, int? currentId) {
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) {
+      String query = '';
+      return StatefulBuilder(
+        builder: (ctx, setS) {
+          final filtered = kBarangays
+              .where((b) => query.trim().isEmpty || b.name.toLowerCase().contains(query.trim().toLowerCase()))
+              .toList();
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Select Barangay', style: TextStyle(fontWeight: FontWeight.w800)),
+            content: SizedBox(
+              width: 400,
+              height: 400,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Search Cabadbaran barangay...',
+                      prefixIcon: Icon(Icons.search_rounded),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setS(() => query = v),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No matching barangay.', style: TextStyle(color: AppColors.muted)))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final b = filtered[i];
+                              final selected = b.id == currentId;
+                              return ListTile(
+                                dense: true,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                selected: selected,
+                                leading: Icon(
+                                  selected ? Icons.check_circle_rounded : Icons.location_on_outlined,
+                                  color: selected ? AppColors.navy : AppColors.muted,
+                                  size: 20,
+                                ),
+                                title: Text(b.name, style: TextStyle(fontWeight: selected ? FontWeight.w800 : FontWeight.w600)),
+                                onTap: () => Navigator.pop(ctx, b.id),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ],
+          );
+        },
+      );
+    },
+  );
 }

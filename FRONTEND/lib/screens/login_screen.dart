@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../core/validators.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/announcement_slideshow.dart';
 import '../widgets/auth_layout.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -52,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Form(
         key: _form,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const AnnouncementSlideshow(),
           Text('Welcome back',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
