@@ -93,7 +93,12 @@ class _AppShellState extends State<AppShell> {
       }
       final wide = box.maxWidth >= 960;
       final content = Column(children: [
-        _TopBar(title: widget.title, user: user, showMenu: !wide),
+        _TopBar(
+          title: widget.title,
+          user: user,
+          showMenu: !wide,
+          allowSearch: widget.activeLabel == user.role.listLabel,
+        ),
         Expanded(child: widget.child),
       ]);
       return Scaffold(
@@ -257,15 +262,21 @@ class _NavTile extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.title, required this.user, required this.showMenu});
+  const _TopBar({
+    required this.title,
+    required this.user,
+    required this.showMenu,
+    required this.allowSearch,
+  });
   final String title;
   final AppUser user;
   final bool showMenu;
+  final bool allowSearch;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      final showSearch = box.maxWidth >= 760;
+      final showSearch = allowSearch && box.maxWidth >= 760;
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
         child: Row(children: [

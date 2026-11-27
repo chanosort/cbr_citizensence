@@ -201,6 +201,42 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
 
   Future<void> _submit() async {
     setState(() => _submitError = null);
+    // Block joke/spam submissions and prompt with captured word(s)
+    if (_result != null && _result!.isJoke) {
+      final words = _result!.jokeWords.isNotEmpty
+          ? _result!.jokeWords.map((w) => '"$w"').join(', ')
+          : null;
+      final msg = words != null
+          ? 'The word/phrase $words you typed belongs to the Joke / Spam category. Please enter a real complaint.'
+          : (_result!.jokeReason.isNotEmpty
+              ? _result!.jokeReason
+              : 'This complaint was detected as a joke or invalid. Please provide a real complaint.');
+      setState(() => _submitError = msg);
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Row(children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 26),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Joke / Invalid Word Detected',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: Color(0xFFDC2626)),
+              ),
+            ),
+          ]),
+          content: Text(msg, style: const TextStyle(height: 1.45)),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Edit Complaint'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     final valid = _form.currentState!.validate();
     if (!_agreed) setState(() => _termsError = true);
     if (!valid || !_agreed) return;

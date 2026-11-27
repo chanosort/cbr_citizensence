@@ -118,6 +118,9 @@ class Classification {
   final List<String> officeNames;
   final List<String> keywords;
   final bool categoryOnly;
+  final bool isJoke;
+  final String jokeReason;
+  final List<String> jokeWords;
 
   const Classification({
     required this.category,
@@ -130,6 +133,9 @@ class Classification {
     this.officeNames = const [],
     this.keywords = const [],
     this.categoryOnly = false,
+    this.isJoke = false,
+    this.jokeReason = '',
+    this.jokeWords = const [],
   });
 
   factory Classification.fromJson(Map<String, dynamic> j) => Classification(
@@ -145,6 +151,9 @@ class Classification {
         officeNames: List<String>.from((j['office_names'] as List?) ?? const []),
         keywords: List<String>.from((j['keywords'] as List?) ?? const []),
         categoryOnly: (j['category_only'] as bool?) ?? false,
+        isJoke: (j['is_joke'] as bool?) ?? false,
+        jokeReason: (j['joke_reason'] as String?) ?? '',
+        jokeWords: List<String>.from((j['joke_words'] as List?) ?? const []),
       );
 }
 

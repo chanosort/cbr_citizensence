@@ -31,140 +31,176 @@ OFFICE_NAMES: Dict[int, str] = {
 # Category Name -> (category_id, default_office_id, multilingual_keywords)
 NLP_CATEGORIES: Dict[str, Tuple[int, int, List[str]]] = {
     'Road & Infrastructure': (1, 1, [
-        # Cebuano
+        # Cebuano / Bisaya
         'dalan', 'kalsada', 'karsada', 'guba nga dalan', 'lubak', 'libaong', 'lungag', 'liki',
         'tulay', 'taytayan', 'nahugno', 'natumpag', 'semento', 'aspalto', 'ali sa dalan',
         'giuba nga building', 'giuba', 'building', 'edipisyo', 'giniba', 'demolisyon',
         'konstruksyon', 'bungkag', 'naguba nga edipisyo', 'pagguba', 'tubig sa tubo',
-        'buslot nga tubo', 'guba nga tubo', 'walay tubig', 'tubig', 'water supply', 'water leak',
+        'buslot nga tubo', 'guba nga tubo', 'walay tubig', 'tubig', 'walay agas', 'agas',
+        'hinay ang agas', 'putol ang tubig', 'nagas', 'nagbuslot', 'lapok sa dalan',
+        'lapok', 'dalan nga guba', 'karsada nga lubak', 'abli nga manhole', 'walay tabon',
+        'waiting shed', 'bangko sa shed', 'bangketa', 'sidewalk',
         # Tagalog
         'kalsada', 'daan', 'butas sa daan', 'bitak', 'sira ang kalsada', 'tulay',
         'gumuho', 'poste', 'manhole', 'nakaharang', 'ginibang building', 'sirang tubo',
-        'walang tubig', 'tagas ng tubig',
+        'walang tubig', 'tagas ng tubig', 'walang tulo', 'mahina ang tubig', 'putol ang tubig',
+        'maputik na daan', 'lubak-lubak', 'sirang bangketa', 'sirang tulay', 'bubong ng shed',
         # English
         'road', 'pothole', 'damaged road', 'broken street', 'cracked pavement', 'bridge',
         'asphalt', 'concrete', 'collapsed', 'repair road', 'sidewalk', 'curb damage',
         'manhole cover', 'excavation', 'infrastructure', 'demolished building',
         'building demolition', 'dilapidated', 'construction complaint', 'building safety',
         'water leak', 'broken pipe', 'water supply', 'water quality', 'plumbing', 'leaking pipe',
-        'waiting shed',
+        'waiting shed', 'no water', 'low water pressure', 'muddy road', 'road repair',
     ]),
     'Streetlights & Electricity': (2, 1, [
-        # Cebuano
-        'suga sa dalan', 'walay suga', 'ngitngit', 'kuryente', 'brownout', 'blackout',
+        # Cebuano / Bisaya
+        'suga sa dalan', 'walay suga', 'ngitngit', 'ngitngit kaayo', 'kuryente', 'brownout', 'blackout',
         'poste sa kuryente', 'natumba nga poste', 'alambre', 'putol nga wire', 'nagbitay nga kable',
-        'pundido nga suga',
+        'pundido nga suga', 'pundido', 'walay kuryente', 'nagkidlap-kidlap', 'nag-spark',
+        'kuryente nga wire', 'delikado nga wire', 'nahulog nga wire', 'kable sa kuryente',
         # Tagalog
-        'ilaw sa kalsada', 'walang ilaw', 'madilim', 'kuryente', 'poste ng kuryente',
-        'natumbang poste', 'nakabiting wire', 'putol na kawad',
+        'ilaw sa kalsada', 'walang ilaw', 'madilim', 'sobrang dilim', 'kuryente', 'poste ng kuryente',
+        'natumbang poste', 'nakabiting wire', 'putol na kawad', 'pundi ang ilaw', 'walang kuryente',
+        'nag-spark na wire', 'patay-sindi ang ilaw', 'nakalaylay na kable',
         # English
         'streetlight', 'street light', 'dark street', 'no street light', 'power outage',
         'blackout', 'brownout', 'electric post', 'fallen pole', 'exposed wire',
         'dangling wire', 'transformer', 'electrical hazard', 'short circuit', 'sparking wire',
+        'broken light', 'flickering light', 'no electricity', 'live wire', 'power line',
     ]),
     'Drainage & Flooding': (3, 5, [
-        # Cebuano
+        # Cebuano / Bisaya
         'baha', 'lunop', 'niawas ang kanal', 'barado nga kanal', 'barado ang kanal',
         'tubig baha', 'sapa', 'suba', 'landslide', 'dahili sa yuta', 'evacuation',
-        'miawas ang sapa', 'kanal',
+        'miawas ang sapa', 'kanal', 'nagbaha', 'baha kaayo', 'puno ang kanal',
+        'walay agasanan', 'drainage', 'nibaha', 'tubig sa karsada', 'baha sa balay',
+        'nahulog nga yuta', 'nagdahili', 'baha sa barangay',
         # Tagalog
         'baha', 'umaapaw ang kanal', 'baradong drainage', 'baradong kanal', 'bumaha',
         'tubig baha', 'ilog', 'sapa', 'landslide', 'pagguho ng lupa', 'paglikas',
+        'binaha', 'mataas ang tubig', 'walang daluyan ng tubig', 'apaw na ilog',
+        'nagbabaha', 'baha sa kalsada', 'tubig na hindi umaalis',
         # English
         'flood', 'flooding', 'flash flood', 'clogged drainage', 'blocked canal',
         'overflowing drain', 'storm drain', 'stagnant water', 'waterlogging',
-        'creek overflow', 'landslide', 'drainage', 'canal',
+        'creek overflow', 'landslide', 'drainage', 'canal', 'soil erosion', 'mudslide',
+        'rising water', 'flooded street', 'blocked culvert',
     ]),
     'Garbage & Sanitation': (4, 3, [
-        # Cebuano
-        'basura', 'hugaw', 'baho', 'wala gihakot nga basura', 'tambak nga basura',
+        # Cebuano / Bisaya
+        'basura', 'hugaw', 'baho', 'bahoa', 'baho kaayo', 'wala gihakot nga basura', 'tambak nga basura',
         'dumpsite', 'paglabay ug basura', 'piggery nga baho', 'hugaw sa baboy',
         'baho sa manokan', 'laina sa hangin', 'lainas hangin', 'laina ug hangin',
         'abog', 'hugaw nga hangin', 'abog kaayo', 'polusyon', 'aso', 'baho nga aso',
-        'hangin nga baho', 'pwerte ka abog', 'kahoy', 'sanga sa kahoy',
+        'hangin nga baho', 'pwerte ka abog', 'kahoy', 'sanga sa kahoy', 'nagkatag nga basura',
+        'nagdaob', 'daob', 'aso sa daob', 'walay truck sa basura', 'wala kolektaha',
+        'matumba nga kahoy', 'taas nga sagbot', 'kasagbotan',
         # Tagalog
-        'basura', 'marumi', 'mabaho', 'hindi kinokolekta ang basura', 'tambak na basura',
+        'basura', 'marumi', 'mabaho', 'sobrang baho', 'hindi kinokolekta ang basura', 'tambak na basura',
         'tapon ng basura', 'amoy piggery', 'amoy babuyan', 'amoy manukan', 'kalat',
         'maruming hangin', 'mabahong hangin', 'polusyon sa hangin', 'alikabok', 'maalikabok',
+        'nagsusunog ng basura', 'usok', 'nakakalat na basura', 'putol ng puno', 'matandang puno',
         # English
         'garbage', 'trash', 'waste', 'uncollected garbage', 'missed garbage', 'garbage pile',
         'dumpsite', 'foul odor', 'stinking', 'piggery smell', 'poultry smell',
         'illegal dumping', 'litter', 'air pollution', 'foul air', 'dust pollution',
         'heavy dust', 'smoke', 'toxic air', 'bad air quality', 'open burning',
         'hazardous waste', 'chemical', 'overgrown branches', 'tree hazard', 'park maintenance',
+        'burning trash', 'rotting waste', 'bad smell', 'fallen tree',
     ]),
     'Health Concerns': (5, 2, [
-        # Cebuano
+        # Cebuano / Bisaya
         'sakit', 'hilanat', 'dengue', 'health center', 'tambalanan', 'tambal', 'doktor',
         'nars', 'bakuna', 'iro nga laag', 'napaakan ug iro', 'kagat sa iro', 'rabies',
         'kalibanga', 'pan-os nga pagkaon', 'hilo sa pagkaon', 'ilaga', 'ok-ok', 'lamok',
+        'daghang lamok', 'nanglabay ug hugaw', 'patay nga hayop', 'baho nga patay',
+        'suka-kalibanga', 'impeksyon', 'walay tambal', 'klinika', 'ambulansya',
         # Tagalog
         'sakit', 'lagnat', 'dengue', 'health center', 'ospital', 'gamot', 'doktor',
         'nars', 'bakuna', 'asong gala', 'nakagat ng aso', 'kagat ng aso', 'rabies',
-        'pagtatae', 'food poisoning', 'sirang pagkain', 'daga', 'lamok',
+        'pagtatae', 'food poisoning', 'sirang pagkain', 'daga', 'lamok', 'ipis',
+        'maraming lamok', 'patay na hayop', 'nagsusuka', 'impeksyon', 'walang gamot',
         # English
         'health', 'hospital', 'clinic', 'health center', 'medicine', 'dengue', 'fever',
         'disease', 'illness', 'rabies', 'dog bite', 'stray dog', 'stray dogs',
         'food poisoning', 'food safety', 'contamination', 'unsanitary', 'pest', 'rodent',
-        'mosquito', 'sanitation', 'public health',
+        'mosquito', 'sanitation', 'public health', 'dead animal', 'diarrhea', 'outbreak',
     ]),
     'Peace, Order & Public Safety': (6, 6, [
-        # Cebuano
+        # Cebuano / Bisaya
         'kawat', 'kawatan', 'tulis', 'holdap', 'away', 'kagubot', 'sinumbagay', 'dunggab',
         'pusil', 'buto sa pusil', 'droga', 'shabu', 'hubog nga nanggubot', 'estambay', 'hulga',
+        'nag-away', 'naghubog', 'nanggubot', 'kawat sa balay', 'gi-snatch', 'snatcher',
+        'guba nga gate', 'vandalism', 'nagsugal', 'sugal', 'curfew', 'bata nga laag',
         # Tagalog
         'magnanakaw', 'holdap', 'nakawan', 'away', 'kaguluhan', 'suntukan', 'saksakan',
         'baril', 'putok ng baril', 'droga', 'shabu', 'lasing na nagwawala', 'estambay', 'banta',
+        'nag-aaway', 'nambubugbog', 'snatcher', 'pasugalan', 'curfew', 'tanod',
         # English
         'theft', 'robbery', 'burglar', 'fight', 'violence', 'stabbing', 'gunshot',
         'shooting', 'illegal drugs', 'public intoxication', 'drunkard disturbance', 'threat',
         'peace and order', 'vandalism', 'graffiti', 'public drinking', 'lost and found',
+        'harassment', 'brawl', 'crime', 'snatching', 'trespassing', 'suspicious person',
     ]),
     'Traffic & Transport': (7, 6, [
-        # Cebuano
-        'trapiko', 'huot ang kalsada', 'aksidente sa motor', 'nabanggaan', 'disgrasya',
+        # Cebuano / Bisaya
+        'trapiko', 'trapik', 'huot ang kalsada', 'aksidente sa motor', 'nabanggaan', 'disgrasya',
         'illegal parking', 'nagbabag sa dalan', 'tricycle nga paspas', 'counterflow',
-        'gi-park', 'nagbabag sa gate',
+        'gi-park', 'nagbabag sa gate', 'bangga', 'paspas magpadagan', 'walay traffic light',
+        'nag-parking sa dalan', 'habal-habal', 'sikad', 'jeepney', 'overloading',
         # Tagalog
         'trapik', 'traffic', 'aksidente sa motor', 'nabangga', 'disgrasya', 'illegal parking',
-        'nakaharang sa daan', 'pasaway na driver', 'counterflow',
+        'nakaharang sa daan', 'pasaway na driver', 'counterflow', 'mabilis magpatakbo',
+        'nakaparada sa daan', 'banggaan', 'walang traffic light', 'sirang traffic light',
         # English
         'traffic', 'traffic congestion', 'vehicle accident', 'motorcycle crash', 'collision',
         'illegal parking', 'blocked driveway', 'abandoned vehicle', 'road obstruction',
         'reckless driving', 'traffic sign', 'signal problem', 'public transport', 'tricycle',
+        'speeding', 'double parking', 'pedestrian lane', 'crosswalk',
     ]),
     'Social Welfare & Assistance': (8, 4, [
-        # Cebuano
+        # Cebuano / Bisaya
         'ayuda', 'tabang pinansyal', 'kabus', 'senior citizen', 'tiguwang', 'pwd',
         'bakol', 'solo parent', 'bata nga giabuso', 'giabandonar nga bata', '4ps',
-        'tabang sa lubong', 'makililimos', 'street dwellers',
+        'tabang sa lubong', 'makililimos', 'street dwellers', 'walay balay', 'tabang sa sakit',
+        'medikal nga tabang', 'burial assistance', 'pensyon', 'social pension',
         # Tagalog
         'ayuda', 'tulong pinansyal', 'mahirap', 'senior citizen', 'matanda', 'pwd',
         'may kapansanan', 'solo parent', 'batang inabuso', '4ps', 'tulong sa libing',
+        'namamalimos', 'walang tirahan', 'tulong medikal', 'pensyon', 'daycare',
         # English
         'financial assistance', 'ayuda', 'senior citizen', 'pwd', 'disability',
         'solo parent', 'child abuse', 'burial assistance', 'indigent assistance',
-        'social welfare', 'street dwellers', 'mendicant', 'day care',
+        'social welfare', 'street dwellers', 'mendicant', 'day care', 'medical assistance',
+        'homeless', 'orphan', 'elderly care', 'relief goods',
     ]),
     'Noise & Public Nuisance': (9, 6, [
-        # Cebuano
-        'saba', 'pwerteng sabaha', 'videoke nga saba', 'karaoke sa gabii', 'saba sa silingan',
+        # Cebuano / Bisaya
+        'saba', 'saba kaayo', 'pwerteng sabaha', 'videoke nga saba', 'karaoke sa gabii', 'saba sa silingan',
         'usig sa iro', 'disco sa karsada', 'kusog kaayong speaker', 'tambutso',
+        'saba ang motor', 'open pipe', 'saba sa tungang gabii', 'nag-videoke', 'sing-along',
+        'kusog nga tugtog', 'saba nga construction', 'saba nga manok', 'tuktugaok',
         # Tagalog
-        'ingay', 'sobrang ingay', 'videoke sa hatinggabi', 'karaoke na maingay',
+        'ingay', 'sobrang ingay', 'maingay', 'videoke sa hatinggabi', 'karaoke na maingay',
         'ingay ng kapitbahay', 'tahol ng aso', 'napakalakas na speaker', 'videoke',
+        'maingay na tambutso', 'malakas na tugtog', 'maingay na motor', 'maingay na construction',
         # English
         'noise', 'noise complaint', 'loud music', 'karaoke', 'videoke', 'barking dog',
         'loud speaker', 'public nuisance', 'loud muffler', 'machinery noise',
+        'noisy neighbor', 'midnight party', 'loud exhaust', 'disturbance',
     ]),
     'Other Concerns': (10, 7, [
-        # Cebuano
+        # Cebuano / Bisaya
         'mayor', 'reklamo sa barangay', 'opisyal', 'kapitan', 'pangutana', 'sugyot',
+        'tindero sa dalan', 'illegal nga tindahan', 'serbisyo sa city hall', 'permiso',
         # Tagalog
         'tanggapan ng mayor', 'reklamo sa barangay', 'kapitan', 'opisyal', 'suhestiyon',
+        'illegal vendor', 'serbisyo publiko', 'reklamo sa tindahan', 'business permit',
         # English
         'mayor office', 'barangay official', 'general inquiry', 'city hall feedback',
         'other concern', 'illegal vending', 'consumer complaint', 'business complaint',
+        'permit', 'public service feedback',
     ]),
 }
 
@@ -269,6 +305,147 @@ _POSITIVE_WORDS = {
     'helpful', 'resolved', 'fixed', 'clean', 'limpyo', 'malinis', 'safe', 'kind',
     'commend', 'grateful', 'request', 'tree planting', 'inquiry',
 }
+
+# ─── Joke / Spam / Nonsense Detection ─────────────────────────────────────────
+_JOKE_PHRASES: List[str] = [
+    # ── English jokes / spam / test / nonsense ──────────────────────────────
+    'haha', 'hahaha', 'hahahaha', 'hahahahaha', 'ha ha ha',
+    'lol', 'lmao', 'lmfao', 'rofl', 'roflmao', 'xd', 'xdd',
+    'just kidding', 'jk', 'joke only', 'joking', 'not serious',
+    'this is a test', 'testing only', 'just testing', 'test only', 'im testing',
+    'im just testing', 'sample only', 'example only', 'try only',
+    'asdf', 'qwerty', 'asdfgh', 'zxcvbn', 'qwertyuiop', 'fjdskl', 'sdfjkl',
+    'aaa', 'bbb', 'ccc', 'ddd', 'eee', 'zzz', 'xxx',
+    'abc', 'abcd', 'abcde', 'abcdef', '123', '1234', '12345', '123456',
+    'aaaaa', 'bbbbb', 'ccccc', 'xxxxx', 'zzzzz',
+    'blah blah', 'blah', 'blah blah blah', 'lorem ipsum',
+    'nothing', 'none', 'nada', 'nil', 'n/a',
+    'idk', 'i dont know', 'i don\'t know', 'dunno', 'no idea',
+    'whatever', 'whatevs', 'nevermind', 'never mind', 'nvm',
+    'no comment', 'no complaint', 'no problem', 'no issue',
+    'for fun', 'for lols', 'for laughs', 'just because',
+    'prank', 'troll', 'trolling', 'trolled',
+    'spam', 'spamming', 'fake', 'fake complaint', 'fake news',
+    'yolo', 'swag', 'skibidi', 'rizz', 'sus', 'sussy', 'bruh', 'bruhh',
+    'deez nuts', 'ligma', 'sigma', 'gyatt', 'fanum tax', 'ohio',
+    'cap', 'no cap', 'sheesh', 'bussin', 'fr fr', 'ong', 'slay',
+    'stupid', 'idiot', 'dumb', 'moron', 'fool',
+    'shit', 'fuck', 'fuck you', 'bitch', 'asshole', 'bastard', 'dick',
+    'wtf', 'wth', 'omg', 'omfg', 'stfu', 'gtfo',
+    'boring', 'bored', 'meh',
+    'lolol', 'lololol', 'kek', 'kekw', 'pepega',
+    'click here', 'free money', 'you won', 'congratulations',
+    'subscribe', 'follow me', 'check this out',
+
+    # ── Tagalog jokes / spam / slang / profanity ────────────────────────────
+    'joke lang', 'joke ko lang', 'nagbibiro lang', 'nagbibiro lang ako',
+    'biro lang', 'biro ko lang', 'biruan lang', 'biruan lang to',
+    'pakitang gilas', 'pakitang tao',
+    'charot', 'charot lang', 'charing', 'char lang', 'chos', 'chos lang',
+    'eme', 'eme lang', 'eme eme', 'emeng eme',
+    'chika lang', 'tsika lang', 'tsismis lang',
+    'walang kwenta', 'wala kwenta', 'walang silbi', 'walang sense',
+    'trip lang', 'tripping', 'trip trip lang', 'nag-trip lang',
+    'wala lang', 'wala lang to', 'walang laman',
+    'bored lang', 'bored lang ako', 'nababaliw na ko',
+    'para lang', 'pang test lang', 'practice lang',
+    'sample lang', 'try lang', 'test lang', 'testing lang',
+    'bobo', 'bobo mo', 'tanga', 'tanga ka', 'tanga mo',
+    'gago', 'gago ka', 'gago mo', 'gaga', 'gaga ka',
+    'ulol', 'ulol ka', 'olol',
+    'putang ina', 'putang ina mo', 'puta', 'tang ina', 'tangina',
+    'tarantado', 'gunggong', 'engot', 'inutil', 'siraulo',
+    'pakyu', 'pak u', 'leche', 'lintik', 'punyeta', 'hudas',
+    'animal ka', 'hayop ka',
+    'petmalu', 'lodi', 'werpa',
+    'skl', 'share ko lang', 'fyi lang',
+    'hehe', 'hihi', 'huhu',
+    'weh di nga',
+
+    # ── Bisaya / Cebuano jokes / spam / slang / profanity ───────────────────
+    'joke ra', 'joke ra ni', 'joke ra man', 'nag-joke ra', 'nagjoke ra',
+    'biro ra', 'biro ra ni', 'biro ra man', 'nagbiro ra',
+    'katawa', 'kataw-anan', 'kataw anan', 'makatawa', 'tawa tawa',
+    'kadyot lang', 'kadyot ra', 'way pulos', 'way gamit', 'way kwenta',
+    'way lami', 'way kapuslanan',
+    'test ra', 'test ra ni', 'testing ra', 'try ra', 'try ra ni',
+    'sample ra', 'sample ra ni', 'practice ra',
+    'wala ra', 'wala ra ni', 'wala ray labot',
+    'trip ra', 'trip ra ni', 'nag-trip ra',
+    'bored ra', 'bored ra ko',
+    'buang', 'buang ka', 'buang jud', 'buang gyud', 'buanga',
+    'bugo', 'bugo ka', 'bugo jud', 'bugo gyud', 'bugoa',
+    'yawa', 'yawa ka', 'yawaa', 'yawi', 'yawai',
+    'atay', 'ataya', 'giatay', 'giataya',
+    'istupido', 'istupida', 'stupido', 'stupida',
+    'lingin', 'lingina', 'amaw', 'amawa',
+    'iring ka', 'iro ka',
+    'pakyas', 'pakyasa', 'bogo', 'bogoa', 'hangol',
+    'charot lang gyud', 'chos ra', 'eme ra', 'eme ra ni',
+    'ambot lang', 'ambot nimo', 'pasagdi na',
+]
+
+def _is_joke_or_spam(text: str, tokens: List[str]) -> Tuple[bool, List[str], str]:
+    """Detect joke, spam, nonsense, or test submissions.
+    Returns (is_joke: bool, captured_words: List[str], reason: str).
+    """
+    lower = text.lower().strip()
+    captured: List[str] = []
+
+    # 1. Too short to be a real complaint (< 3 real words)
+    alpha_tokens = [t for t in tokens if len(t) > 1 and t.isalpha()]
+    if len(alpha_tokens) < 2 and len(lower) < 10:
+        return True, [lower], 'Too short to be a real complaint.'
+
+    # 2. Check for known joke/spam phrases — collect ALL matches
+    for phrase in _JOKE_PHRASES:
+        pat = re.compile(r'(?<!\w)' + re.escape(phrase) + r'(?!\w)')
+        if pat.search(lower):
+            captured.append(phrase)
+
+    if captured:
+        words_str = ', '.join(f'"{w}"' for w in captured[:5])
+        return True, captured[:5], f'The word/phrase {words_str} you typed belongs to the Joke / Spam category.'
+
+    # 3. Excessive repeated characters (e.g., "aaaaaaa", "hahahahahaha")
+    rep_match = re.search(r'(.)\1{4,}', lower)
+    if rep_match:
+        captured_char = rep_match.group(0)
+        return True, [captured_char], f'Excessive repeated characters: "{captured_char}".'
+
+    # 4. Excessive repeated words (e.g., "test test test test")
+    if len(tokens) >= 3:
+        word_counts = Counter(tokens)
+        most_common_word, most_common_count = word_counts.most_common(1)[0]
+        if most_common_count >= 3 and most_common_count / len(tokens) > 0.6:
+            return True, [most_common_word], f'Repetitive text: "{most_common_word}" repeated {most_common_count} times.'
+
+    # 5. All numbers / no meaningful alpha content
+    alpha_chars = sum(1 for c in lower if c.isalpha())
+    if len(lower) >= 3 and alpha_chars < len(lower) * 0.3:
+        return True, [lower[:20]], 'Text contains mostly numbers/symbols, not a valid complaint.'
+
+    # 6. Text is entirely profanity with no complaint context
+    profanity = {'bobo', 'gago', 'gaga', 'tanga', 'ulol', 'olol', 'putang', 'ina',
+                 'puta', 'tangina', 'tarantado', 'gunggong', 'engot', 'inutil',
+                 'siraulo', 'pakyu', 'leche', 'lintik', 'punyeta', 'hudas',
+                 'buang', 'bugo', 'bogo', 'yawa', 'atay', 'giatay', 'istupido',
+                 'istupida', 'lingin', 'lingina', 'amaw', 'amawa', 'pakyas',
+                 'shit', 'fuck', 'damn', 'ass', 'bitch', 'stupid', 'idiot',
+                 'moron', 'dumb', 'bastard', 'dick', 'asshole'}
+    complaint_context = set()
+    for cat_name, pats in _CAT_PATTERNS_FLAT:
+        for kw, pat, _ in pats:
+            if pat.search(lower):
+                complaint_context.add(cat_name)
+    profanity_tokens = [t for t in tokens if t in profanity]
+    if len(profanity_tokens) >= 2 and not complaint_context and len(alpha_tokens) <= 5:
+        return True, profanity_tokens[:5], f'Contains profanity without a real complaint: {", ".join(profanity_tokens[:5])}.'
+
+    return False, [], ''
+
+# Flat reference for profanity-with-no-context check (populated after class init)
+_CAT_PATTERNS_FLAT: List[Tuple[str, List[Tuple[str, re.Pattern, int]]]] = []
 
 
 def _tokenize(text: str) -> List[str]:
@@ -565,6 +742,9 @@ class HybridComplaintClassifier:
 
         category_only = len(text) < 10 and category_id is not None
 
+        # 8. Joke / Spam / Nonsense Detection
+        is_joke, joke_words, joke_reason = _is_joke_or_spam(text, tokens)
+
         return {
             'category': final_cat_name,
             'category_id': final_cat_id,
@@ -579,8 +759,15 @@ class HybridComplaintClassifier:
             'keywords': matched_keywords[:6],
             'category_only': category_only,
             'ml_probability': round(ml_top_prob, 2),
+            'is_joke': is_joke,
+            'joke_reason': joke_reason,
+            'joke_words': joke_words,
         }
 
 
 # Singleton classifier trained once on module import
 classifier = HybridComplaintClassifier()
+
+# Populate flat pattern reference for profanity-with-no-context check
+_CAT_PATTERNS_FLAT.clear()
+_CAT_PATTERNS_FLAT.extend(classifier._cat_patterns.items())

@@ -35,6 +35,8 @@ class ClassificationCard extends StatelessWidget {
       );
     } else if (r == null) {
       content = const _Analyzing();
+    } else if (r.isJoke) {
+      content = _JokeWarning(reason: r.jokeReason, words: r.jokeWords);
     } else {
       content = _Result(r: r, loading: loading);
     }
@@ -208,4 +210,96 @@ class _Row extends StatelessWidget {
           Flexible(child: Align(alignment: Alignment.centerRight, child: child)),
         ]),
       );
+}
+
+class _JokeWarning extends StatelessWidget {
+  const _JokeWarning({required this.reason, required this.words});
+  final String reason;
+  final List<String> words;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 22),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Invalid Complaint Detected',
+              style: TextStyle(
+                color: Color(0xFFDC2626),
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Text(
+          words.isNotEmpty
+              ? 'The word/phrase ${words.map((w) => '"$w"').join(', ')} you typed belongs to the Joke / Spam category. Please provide a real description of your concern.'
+              : 'This does not appear to be a legitimate complaint. Please provide a real description of your concern.',
+          style: const TextStyle(color: Color(0xFF991B1B), fontSize: 13, height: 1.45),
+        ),
+        if (words.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          const Text('Words captured:', style: TextStyle(color: Color(0xFFB91C1C), fontSize: 12, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final w in words)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.flag_rounded, size: 13, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '"$w"',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFDC2626),
+                    ),
+                  ),
+                ]),
+              ),
+          ]),
+        ],
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEE2E2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            const Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFFB91C1C)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                reason,
+                style: const TextStyle(fontSize: 11.5, color: Color(0xFFB91C1C), fontStyle: FontStyle.italic),
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          '⚠ You cannot submit this complaint.',
+          style: TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ]),
+    );
+  }
 }
