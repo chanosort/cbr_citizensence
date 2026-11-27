@@ -98,7 +98,7 @@ class _AnnouncementSlideshowState extends State<AnnouncementSlideshow> {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: 132,
+            height: 175,
             child: PageView.builder(
               controller: _controller,
               itemCount: _items.length,
@@ -139,8 +139,6 @@ class _AnnouncementSlideshowState extends State<AnnouncementSlideshow> {
                       const SizedBox(height: 8),
                       Text(
                         a.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 15,
@@ -149,11 +147,11 @@ class _AnnouncementSlideshowState extends State<AnnouncementSlideshow> {
                       ),
                       const SizedBox(height: 4),
                       Expanded(
-                        child: Text(
-                          a.content,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.35),
+                        child: SingleChildScrollView(
+                          child: Text(
+                            a.content,
+                            style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.35),
+                          ),
                         ),
                       ),
                     ],
