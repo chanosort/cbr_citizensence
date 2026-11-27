@@ -54,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
         key: _form,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const AnnouncementSlideshow(),
-          Text('Welcome back',
+          Text('Welcome',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           const Text('Log in to file or manage complaints.',
