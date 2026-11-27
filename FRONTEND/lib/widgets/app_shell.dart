@@ -150,8 +150,42 @@ class _Sidebar extends StatelessWidget {
             ]),
           ),
           Padding(
-            padding: const EdgeInsets.only(left: 20, bottom: 24),
+            padding: const EdgeInsets.only(left: 20, bottom: 16),
             child: Container(width: 36, height: 3, color: AppColors.gold),
+          ),
+          // Profile + Notification Bell transferred to the side panel
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+              ),
+              child: Row(children: [
+                CircleAvatar(
+                  radius: 19,
+                  backgroundColor: Colors.white,
+                  child: Text(user.initials,
+                      style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 13)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    Text(user.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                    Text(user.role.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                  ]),
+                ),
+                const _Bell(light: true),
+              ]),
+            ),
           ),
           Expanded(
             child: ListView(children: [
@@ -232,7 +266,6 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
       final showSearch = box.maxWidth >= 760;
-      final showName = box.maxWidth >= 520;
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
         child: Row(children: [
@@ -269,21 +302,9 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ],
-          const Spacer(),
-          const _Bell(),
-          const SizedBox(width: 8),
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: AppColors.navy,
-            child: Text(user.initials,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
-          ),
-          if (showName) ...[
-            const SizedBox(width: 10),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              Text(user.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-              Text(user.role.label, style: const TextStyle(color: AppColors.muted, fontSize: 11.5)),
-            ]),
+          if (showMenu) ...[
+            const Spacer(),
+            const _Bell(),
           ],
         ]),
       );
@@ -292,7 +313,8 @@ class _TopBar extends StatelessWidget {
 }
 
 class _Bell extends StatefulWidget {
-  const _Bell();
+  const _Bell({this.light = false});
+  final bool light;
 
   @override
   State<_Bell> createState() => _BellState();
@@ -396,7 +418,10 @@ class _BellState extends State<_Bell> {
     return Stack(clipBehavior: Clip.none, children: [
       IconButton(
         tooltip: 'Notifications',
-        icon: const Icon(Icons.notifications_none_rounded),
+        icon: Icon(
+          Icons.notifications_none_rounded,
+          color: widget.light ? Colors.white : null,
+        ),
         onPressed: _open,
       ),
       if (count > 0)

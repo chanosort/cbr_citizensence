@@ -798,11 +798,14 @@ class _AnnouncementsManagerDialogState extends State<_AnnouncementsManagerDialog
     }
   }
 
-  Future<void> _openCreateForm() async {
+  Future<void> _openCreateForm({AnnouncementItem? existing}) async {
     final form = GlobalKey<FormState>();
-    final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
-    String category = 'Announcement';
+    final titleCtrl = TextEditingController(text: existing?.title ?? '');
+    final contentCtrl = TextEditingController(text: existing?.content ?? '');
+    const validCategories = ['Announcement', 'Promotion', 'Advisory', 'Event'];
+    String category = (existing != null && validCategories.contains(existing.category))
+        ? existing.category
+        : 'Announcement';
     bool saving = false;
 
     await showDialog<void>(
@@ -811,7 +814,11 @@ class _AnnouncementsManagerDialogState extends State<_AnnouncementsManagerDialog
         builder: (ctx, setS) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
-            widget.isAdmin ? 'Publish Announcement / Promotion' : 'Request Announcement / Promotion',
+            existing != null
+                ? 'Edit Announcement / Promotion'
+                : widget.isAdmin
+                    ? 'Publish Announcement / Promotion'
+                    : 'Request Announcement / Promotion',
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           content: SizedBox(
@@ -821,7 +828,7 @@ class _AnnouncementsManagerDialogState extends State<_AnnouncementsManagerDialog
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!widget.isAdmin)
+                  if (!widget.isAdmin && existing == null)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 12),
                       child: MessageBanner(
@@ -866,18 +873,32 @@ class _AnnouncementsManagerDialogState extends State<_AnnouncementsManagerDialog
                       if (!form.currentState!.validate()) return;
                       setS(() => saving = true);
                       try {
-                        await context.read<ApiService>().createAnnouncement(
-                              title: titleCtrl.text.trim(),
-                              content: contentCtrl.text.trim(),
-                              category: category,
-                            );
+                        final api = context.read<ApiService>();
+                        if (existing != null) {
+                          await api.updateAnnouncement(
+                            id: existing.id,
+                            title: titleCtrl.text.trim(),
+                            content: contentCtrl.text.trim(),
+                            category: category,
+                          );
+                        } else {
+                          await api.createAnnouncement(
+                            title: titleCtrl.text.trim(),
+                            content: contentCtrl.text.trim(),
+                            category: category,
+                          );
+                        }
                         if (ctx.mounted) Navigator.pop(ctx);
                         _load();
                       } catch (_) {
                         setS(() => saving = false);
                       }
                     },
-              child: Text(widget.isAdmin ? 'Publish Now' : 'Submit Request'),
+              child: Text(
+                existing != null
+                    ? 'Save Changes'
+                    : (widget.isAdmin ? 'Publish Now' : 'Submit Request'),
+              ),
             ),
           ],
         ),
@@ -980,6 +1001,11 @@ class _AnnouncementsManagerDialogState extends State<_AnnouncementsManagerDialog
                                           _load();
                                         },
                                       ),
+                                    IconButton(
+                                      tooltip: 'Edit announcement',
+                                      icon: const Icon(Icons.edit_rounded, color: AppColors.navy),
+                                      onPressed: () => _openCreateForm(existing: a),
+                                    ),
                                     IconButton(
                                       tooltip: 'Delete',
                                       icon: const Icon(Icons.delete_outline_rounded, color: AppColors.star),
