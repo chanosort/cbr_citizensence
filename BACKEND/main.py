@@ -590,6 +590,11 @@ def _send_email(to: str, subject: str, body: str):
         print(f'\n[SMTP ERROR] Could not send email via SMTP ({e}).')
         print(f'Fallback OTP printed to console for: {to}\n{body}\n')
 
+def _send_email_async(to: str, subject: str, body: str):
+    """Send email in a background thread so API responses never block on SMTP/API I/O."""
+    import threading
+    threading.Thread(target=_send_email, args=(to, subject, body), daemon=True).start()
+
 def _issue_otp(db: Session, email: str, purpose: str) -> str:
     """Generate a 6-digit OTP, store its hash, invalidate old ones, return the plain code."""
     old = db.scalars(select(OtpToken).where(
@@ -695,6 +700,11 @@ class ResetPasswordIn(BaseModel):
     email: Optional[str] = None
     code: str = Field(min_length=6, max_length=6)
     new_password: str = Field(min_length=8, max_length=128)
+
+class VerifyResetCodeIn(BaseModel):
+    account: Optional[str] = None
+    email: Optional[str] = None
+    code: str = Field(min_length=6, max_length=6)
 
 class ComplaintIn(BaseModel):
     title: str = Field(min_length=3, max_length=200)
@@ -809,7 +819,7 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
         print(f"Notice: users_tbl sync: {e}")
 
     code = _issue_otp(db, email, 'verify_email')
-    _send_email(
+    _send_email_async(
         to=email,
         subject='CBR CitizenSense – Verify your email',
         body=(
@@ -848,7 +858,7 @@ def resend_verification(data: ResendVerifyIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == email))
     if user and not user.email_verified:
         code = _issue_otp(db, email, 'verify_email')
-        _send_email(
+        _send_email_async(
             to=email,
             subject='CBR CitizenSense – Verify your email (resent)',
             body=(
@@ -887,7 +897,7 @@ def forgot_password(data: ForgotPasswordIn, db: Session = Depends(get_db)):
     masked_email = ''
     if user and user.active:
         code = _issue_otp(db, user.email, 'reset_password')
-        _send_email(
+        _send_email_async(
             to=user.email,
             subject='CBR CitizenSense – Account Recovery Code',
             body=(
@@ -905,6 +915,31 @@ def forgot_password(data: ForgotPasswordIn, db: Session = Depends(get_db)):
             masked_name = (n[0] + '***' + n[-1]) if len(n) > 2 else (n[0] + '***')
             masked_email = f'{masked_name}@{d}'
     return ok({'message': 'If that account is registered, a reset code has been sent.', 'email': masked_email})
+
+# ─── Auth: Verify reset code (before typing new password) ────────────────────
+
+@app.post('/api/auth/verify-reset-code')
+def verify_reset_code(data: VerifyResetCodeIn, db: Session = Depends(get_db)):
+    ident = str(data.account or data.email or '').lower().strip()
+    user = db.scalar(select(User).where(
+        (func.lower(User.email) == ident) | (func.lower(User.username) == ident)
+    ))
+    if not user or not user.active:
+        raise HTTPException(400, detail={'code': 'INVALID_CODE', 'message': 'The code is incorrect or has expired.', 'details': {}})
+    now = datetime.now(timezone.utc)
+    tok = db.scalar(
+        select(OtpToken)
+        .where(OtpToken.email == user.email, OtpToken.purpose == 'reset_password', OtpToken.used == False)
+        .order_by(OtpToken.created_at.desc())
+    )
+    if not tok:
+        raise HTTPException(400, detail={'code': 'INVALID_CODE', 'message': 'The code is incorrect or has expired.', 'details': {}})
+    exp = tok.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp < now or not hmac.compare_digest(tok.code_hash, _hash_otp(data.code.strip())):
+        raise HTTPException(400, detail={'code': 'INVALID_CODE', 'message': 'The code is incorrect or has expired.', 'details': {}})
+    return ok({'valid': True, 'message': 'Code verified. You can now enter your new password.'})
 
 # ─── Auth: Reset password ─────────────────────────────────────────────────────
 
@@ -987,7 +1022,7 @@ def request_email_change(data: EmailChangeRequestIn, user: User = Depends(curren
     if db.scalar(select(User).where(User.email == new_email)):
         raise HTTPException(409, detail={'code': 'EMAIL_EXISTS', 'message': 'This email is already in use by another account.'})
     code = _issue_otp(db, new_email, 'change_email')
-    _send_email(
+    _send_email_async(
         to=new_email,
         subject='CBR CitizenSense – Confirm your new email address',
         body=(

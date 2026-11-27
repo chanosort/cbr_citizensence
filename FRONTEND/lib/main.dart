@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import 'core/constants.dart';
@@ -12,6 +13,10 @@ import 'services/api_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kUseMockApi) {
+    // Non-blocking warm-up ping so Render free tier wakes up while user types.
+    http.get(Uri.parse('$kApiBaseUrl/api/health')).then((_) {}, onError: (_) {});
+  }
   final ApiService api = kUseMockApi ? MockApiService() : HttpApiService(kApiBaseUrl);
   final auth = AuthProvider(api);
   final theme = ThemeProvider();

@@ -45,6 +45,9 @@ abstract class ApiService {
   /// Request an account recovery OTP (accepts username or email; code sent to email).
   Future<String?> forgotPassword({required String email});
 
+  /// Verify reset OTP before allowing user to type a new password.
+  Future<void> verifyResetCode({required String email, required String code});
+
   /// Verify reset OTP and set a new password.
   Future<void> resetPassword({
     required String email,
@@ -153,7 +156,7 @@ class HttpApiService implements ApiService {
   Future<Map<String, dynamic>> _send(Future<http.Response> Function() call) async {
     http.Response r;
     try {
-      r = await call().timeout(const Duration(seconds: 20));
+      r = await call().timeout(const Duration(seconds: 60));
     } on TimeoutException {
       throw const ApiException(
           0, 'TIMEOUT', 'The server took too long to respond. Please try again.');
@@ -240,6 +243,15 @@ class HttpApiService implements ApiService {
   Future<String?> forgotPassword({required String email}) async {
     final res = await _post('/api/auth/forgot-password', {'account': email, 'email': email});
     return res['email'] as String?;
+  }
+
+  @override
+  Future<void> verifyResetCode({required String email, required String code}) async {
+    await _post('/api/auth/verify-reset-code', {
+      'account': email,
+      'email': email,
+      'code': code,
+    });
   }
 
   @override
@@ -518,7 +530,7 @@ class HttpApiService implements ApiService {
     final req = http.MultipartRequest('POST', _u('/api/auth/avatar'));
     if (_token != null) req.headers['Authorization'] = 'Bearer $_token';
     req.files.add(http.MultipartFile.fromBytes('avatar', bytes, filename: fileName));
-    final streamed = await req.send().timeout(const Duration(seconds: 25));
+    final streamed = await req.send().timeout(const Duration(seconds: 60));
     final r = await http.Response.fromStream(streamed);
     final d = await _send(() async => r);
     return AppUser.fromJson((d['user'] as Map).cast<String, dynamic>());
@@ -837,6 +849,15 @@ class MockApiService implements ApiService {
       return u.email;
     }
     return null;
+  }
+
+  @override
+  Future<void> verifyResetCode({required String email, required String code}) async {
+    await _lag(300);
+    final key = email.trim().toLowerCase();
+    if (_resetCodes[key] != code.trim() && code.trim() != '654321') {
+      throw const ApiException(400, 'INVALID_CODE', 'The code is incorrect or has expired.');
+    }
   }
 
   @override
