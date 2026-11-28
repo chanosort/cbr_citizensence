@@ -646,8 +646,15 @@ def iso(dt):
         return dt.isoformat()
     return str(dt)
 
-def complaint_json(c: ComplaintRow, db: Session, user_obj=None, mask_citizen: bool = False):
-    u = user_obj if user_obj is not None else db.get(User, c.citizen_id)
+def complaint_json(c: ComplaintRow, db: Session, user_obj=None, mask_citizen: bool = False, users_cache: Optional[dict] = None):
+    if mask_citizen:
+        u = None
+    elif user_obj is not None:
+        u = user_obj
+    elif users_cache is not None:
+        u = users_cache.get(c.citizen_id)
+    else:
+        u = db.get(User, c.citizen_id)
     co_ids = [int(x) for x in (c.co_office_ids or '').split(',') if x.strip().isdigit()]
     return {
         'id': c.id,
@@ -1347,8 +1354,8 @@ def get_complaint_attachment(
 def list_own(user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_role(user, 'citizen')
     try:
-        rows = list(db.scalars(select(ComplaintRow).where(ComplaintRow.citizen_id == user.id).order_by(ComplaintRow.created_at.desc())))
-        return ok({'items': [complaint_json(c, db) for c in rows]})
+        rows = list(db.scalars(select(ComplaintRow).where(ComplaintRow.citizen_id == user.id).order_by(ComplaintRow.created_at.desc()).limit(300)))
+        return ok({'items': [complaint_json(c, db, user_obj=user) for c in rows]})
     except Exception as e:
         print(f'Error listing complaints: {e}')
         return ok({'items': []})
@@ -1361,17 +1368,16 @@ def list_staff(user: User = Depends(current_user), db: Session = Depends(get_db)
         select(ComplaintRow).where(
             (ComplaintRow.office_id == user.office_id) |
             (ComplaintRow.co_office_ids.like(f'%{user_oid}%'))
-        ).order_by(ComplaintRow.created_at.desc()).limit(2030)
+        ).order_by(ComplaintRow.created_at.desc()).limit(300)
     ))
-    users_cache = {u.id: u for u in db.scalars(select(User)).all()}
-    return ok({'items': [complaint_json(c, db, users_cache.get(c.citizen_id), mask_citizen=True) for c in rows]})
+    return ok({'items': [complaint_json(c, db, mask_citizen=True) for c in rows]})
 
 @app.get('/api/admin/complaints')
 def list_all(user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_role(user, 'admin')
-    rows = list(db.scalars(select(ComplaintRow).order_by(ComplaintRow.created_at.desc()).limit(2030)))
+    rows = list(db.scalars(select(ComplaintRow).order_by(ComplaintRow.created_at.desc()).limit(300)))
     users_cache = {u.id: u for u in db.scalars(select(User)).all()}
-    return ok({'items': [complaint_json(c, db, users_cache.get(c.citizen_id)) for c in rows]})
+    return ok({'items': [complaint_json(c, db, users_cache=users_cache) for c in rows]})
 
 @app.get('/api/complaints/export-csv')
 def export_my_complaints_csv(
@@ -1645,7 +1651,7 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
             return round((cur_cnt - prev_cnt) * 100 / prev_cnt)
 
         mask_citizen = (user.role == 'staff')
-        users_cache = {u.id: u for u in db.scalars(select(User)).all()}
+        users_cache = {} if mask_citizen else {u.id: u for u in db.scalars(select(User)).all()}
         return ok({
             'pending': pending,
             'in_progress': progress,
@@ -1661,7 +1667,7 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
                 'pending': pending_trend,
                 'in_progress': progress_trend
             },
-            'recent': [complaint_json(c, db, users_cache.get(c.citizen_id), mask_citizen=mask_citizen) for c in rows[:5]],
+            'recent': [complaint_json(c, db, users_cache=users_cache, mask_citizen=mask_citizen) for c in rows[:5]],
             'categories': [{'name': k, 'percent': round(v * 100 / total) if total else 0} for k, v in sorted(cats.items(), key=lambda x: -x[1])[:4]]
         })
     except Exception as e:
@@ -1708,6 +1714,7 @@ def reports(days: int = 30, office_id: Optional[int] = None, category_id: Option
         return [{'label': k, 'count': v} for k, v in sorted(d.items(), key=lambda x: -x[1])]
 
     closed = sum(c.status in ('resolved', 'closed') for c in rows)
+    users_cache = {u.id: u for u in db.scalars(select(User)).all()}
     return ok({
         'total': len(rows),
         'open': len(rows) - closed,
@@ -1716,7 +1723,7 @@ def reports(days: int = 30, office_id: Optional[int] = None, category_id: Option
         'by_office': tally(lambda c: _office_label(c.office_id)),
         'by_priority': tally(lambda c: (c.priority or 'medium').capitalize()),
         'by_status': tally(lambda c: (c.status or 'submitted').replace('_', ' ').title()),
-        'rows': [complaint_json(c, db) for c in rows],
+        'rows': [complaint_json(c, db, users_cache=users_cache) for c in rows[:200]],
     })
 
 

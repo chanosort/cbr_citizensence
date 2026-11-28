@@ -11,17 +11,17 @@ class DashboardProvider extends ChangeNotifier {
   bool loading = false;
   String? error;
 
-  Future<void> load() async {
-    data = null; // never show the previous user's numbers
-    loading = true;
+  Future<void> load({bool forceClear = false}) async {
+    if (forceClear) data = null;
+    loading = data == null;
     error = null;
     notifyListeners();
     try {
       data = await _api.dashboard();
     } on ApiException catch (e) {
-      error = e.message;
+      if (data == null) error = e.message;
     } catch (_) {
-      error = 'Unable to load the dashboard. Please try again.';
+      if (data == null) error = 'Unable to load the dashboard. Please try again.';
     }
     loading = false;
     notifyListeners();
