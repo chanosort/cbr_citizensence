@@ -1,4 +1,4 @@
-import os, base64, hashlib, hmac, json, secrets, time, random, mimetypes
+import os, re, base64, hashlib, hmac, json, secrets, time, random, mimetypes
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
