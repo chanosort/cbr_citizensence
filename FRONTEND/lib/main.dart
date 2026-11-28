@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -36,18 +38,45 @@ class CitizenSenseApp extends StatefulWidget {
 }
 
 class _CitizenSenseAppState extends State<CitizenSenseApp> {
+  static const _idleTimeout = Duration(minutes: 15);
   late final DashboardProvider _dashboard;
   late final GoRouter _router;
+  Timer? _idleTimer;
 
   @override
   void initState() {
     super.initState();
     _dashboard = DashboardProvider(widget.api);
     _router = buildRouter(widget.auth);
+    widget.auth.addListener(_onAuthChanged);
+    _resetIdleTimer();
+  }
+
+  void _onAuthChanged() {
+    if (widget.auth.user != null) {
+      _resetIdleTimer();
+    } else {
+      _idleTimer?.cancel();
+      _idleTimer = null;
+    }
+  }
+
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    if (widget.auth.user == null) return;
+    _idleTimer = Timer(_idleTimeout, () {
+      if (widget.auth.user != null) {
+        widget.auth.logout(
+          notice: 'Your session expired after 15 minutes of inactivity. Please log in again.',
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
+    _idleTimer?.cancel();
+    widget.auth.removeListener(_onAuthChanged);
     widget.auth.dispose();
     _dashboard.dispose();
     _router.dispose();
@@ -56,21 +85,26 @@ class _CitizenSenseAppState extends State<CitizenSenseApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        Provider<ApiService>.value(value: widget.api),
-        ChangeNotifierProvider<AuthProvider>.value(value: widget.auth),
-        ChangeNotifierProvider<DashboardProvider>.value(value: _dashboard),
-        ChangeNotifierProvider<ThemeProvider>.value(value: widget.theme),
-      ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProv, _) => MaterialApp.router(
-          title: 'Cabadbaran CitizenSense',
-          debugShowCheckedModeBanner: false,
-          theme: buildTheme(),
-          darkTheme: buildDarkTheme(),
-          themeMode: themeProv.mode,
-          routerConfig: _router,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _resetIdleTimer(),
+      onPointerMove: (_) => _resetIdleTimer(),
+      child: MultiProvider(
+        providers: [
+          Provider<ApiService>.value(value: widget.api),
+          ChangeNotifierProvider<AuthProvider>.value(value: widget.auth),
+          ChangeNotifierProvider<DashboardProvider>.value(value: _dashboard),
+          ChangeNotifierProvider<ThemeProvider>.value(value: widget.theme),
+        ],
+        child: Consumer<ThemeProvider>(
+          builder: (context, themeProv, _) => MaterialApp.router(
+            title: 'Cabadbaran CitizenSense',
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(),
+            darkTheme: buildDarkTheme(),
+            themeMode: themeProv.mode,
+            routerConfig: _router,
+          ),
         ),
       ),
     );

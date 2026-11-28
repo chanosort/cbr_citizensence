@@ -72,6 +72,10 @@ class _LoginScreenState extends State<LoginScreen> {
             const MessageBanner(message: 'Password reset successfully. You can now log in.', good: true),
             const SizedBox(height: 16),
           ],
+          if (auth.sessionNotice != null && auth.error == null) ...[
+            MessageBanner(message: auth.sessionNotice!),
+            const SizedBox(height: 16),
+          ],
           if (auth.error != null) ...[
             MessageBanner(message: auth.error!),
             const SizedBox(height: 16),

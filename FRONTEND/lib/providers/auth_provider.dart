@@ -14,6 +14,7 @@ class AuthProvider extends ChangeNotifier {
   AppUser? user;
   bool busy = false;
   String? error;
+  String? sessionNotice;
 
   /// Real-API mode only: bring back the saved session after a page refresh.
   Future<void> restore() async {
@@ -65,11 +66,19 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  void clearSessionNotice() {
+    if (sessionNotice != null) {
+      sessionNotice = null;
+      notifyListeners();
+    }
+  }
+
   // ── Login ────────────────────────────────────────────────────────────────
 
   Future<bool> login(String email, String password) async {
     busy = true;
     error = null;
+    sessionNotice = null;
     notifyListeners();
     try {
       final s = await _api.login(email: email.trim(), password: password);
@@ -97,6 +106,7 @@ class AuthProvider extends ChangeNotifier {
     required String username,
     required String email,
     required String password,
+    required List<Map<String, String>> securityQuestions,
   }) async {
     busy = true;
     error = null;
@@ -107,6 +117,7 @@ class AuthProvider extends ChangeNotifier {
         username: username.trim(),
         email: email.trim(),
         password: password,
+        securityQuestions: securityQuestions,
       );
       busy = false;
       notifyListeners();
@@ -163,12 +174,43 @@ class AuthProvider extends ChangeNotifier {
 
   // ── Forgot / reset password ──────────────────────────────────────────────
 
-  Future<String?> forgotPassword({required String email}) async {
+  Future<({String email, List<SecurityQuestionChoice> questions})?> fetchForgotPasswordQuestions({
+    required String email,
+  }) async {
     busy = true;
     error = null;
     notifyListeners();
     try {
-      final hint = await _api.forgotPassword(email: email.trim());
+      final res = await _api.getForgotPasswordQuestions(email: email.trim());
+      busy = false;
+      notifyListeners();
+      return res;
+    } on ApiException catch (e) {
+      error = e.displayMessage;
+    } catch (_) {
+      error = 'Something went wrong. Please try again.';
+    }
+    busy = false;
+    notifyListeners();
+    return null;
+  }
+
+  Future<String?> forgotPassword({
+    required String email,
+    required int questionId,
+    required String answer,
+    required String confirmAnswer,
+  }) async {
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      final hint = await _api.forgotPassword(
+        email: email.trim(),
+        questionId: questionId,
+        answer: answer,
+        confirmAnswer: confirmAnswer,
+      );
       busy = false;
       notifyListeners();
       return hint ?? email.trim();
@@ -213,11 +255,12 @@ class AuthProvider extends ChangeNotifier {
 
   // ── Logout ───────────────────────────────────────────────────────────────
 
-  void logout() {
+  void logout({String? notice}) {
     _api.setToken(null);
     _clearSaved();
     user = null;
     error = null;
+    sessionNotice = notice;
     notifyListeners();
   }
 }

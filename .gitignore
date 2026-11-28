@@ -1,0 +1,10 @@
+# Secrets - NEVER commit .env files
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/

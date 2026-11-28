@@ -16,6 +16,17 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
+const _kSecurityQuestions = <String>[
+  'What is the name of your elementary school?',
+  "What is your pet's name?",
+  'What is the name of your best friend?',
+  "What is your mother's maiden name?",
+  'In what city were you born?',
+  'What was your childhood nickname?',
+  'What is the name of your favorite teacher?',
+  'What was the make of your first car or bike?',
+];
+
 class _RegisterScreenState extends State<RegisterScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
@@ -23,6 +34,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
+  final _ans1 = TextEditingController();
+  final _ans2 = TextEditingController();
+  final _ans3 = TextEditingController();
+  String _q1 = _kSecurityQuestions[0];
+  String _q2 = _kSecurityQuestions[1];
+  String _q3 = _kSecurityQuestions[2];
   late final TapGestureRecognizer _termsTap;
   bool _obscure = true;
   bool _agreed = false;
@@ -45,6 +62,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _email.dispose();
     _password.dispose();
     _confirm.dispose();
+    _ans1.dispose();
+    _ans2.dispose();
+    _ans3.dispose();
     super.dispose();
   }
 
@@ -71,6 +91,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       username: _username.text,
       email: email,
       password: _password.text,
+      securityQuestions: [
+        {'question': _q1, 'answer': _ans1.text.trim()},
+        {'question': _q2, 'answer': _ans2.text.trim()},
+        {'question': _q3, 'answer': _ans3.text.trim()},
+      ],
     );
 
     if (success && mounted) {
@@ -152,9 +177,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
           TextFormField(
             controller: _confirm,
             obscureText: _obscure,
-            textInputAction: TextInputAction.done,
+            textInputAction: TextInputAction.next,
             decoration: const InputDecoration(labelText: 'Confirm password'),
             validator: (v) => v != _password.text ? 'Passwords do not match.' : null,
+          ),
+          const SizedBox(height: 20),
+          Text('Security Questions',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text(
+            'Choose 3 different questions and provide your answers for account recovery.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+          ),
+          const SizedBox(height: 12),
+          _buildQuestionPicker(
+            label: 'Security Question 1',
+            value: _q1,
+            others: {_q2, _q3},
+            onChanged: (v) => setState(() => _q1 = v!),
+            answerController: _ans1,
+            answerAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          _buildQuestionPicker(
+            label: 'Security Question 2',
+            value: _q2,
+            others: {_q1, _q3},
+            onChanged: (v) => setState(() => _q2 = v!),
+            answerController: _ans2,
+            answerAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          _buildQuestionPicker(
+            label: 'Security Question 3',
+            value: _q3,
+            others: {_q1, _q2},
+            onChanged: (v) => setState(() => _q3 = v!),
+            answerController: _ans3,
+            answerAction: TextInputAction.done,
           ),
           const SizedBox(height: 14),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -206,5 +266,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ]),
       ),
     );
+  }
+
+  Widget _buildQuestionPicker({
+    required String label,
+    required String value,
+    required Set<String> others,
+    required ValueChanged<String?> onChanged,
+    required TextEditingController answerController,
+    required TextInputAction answerAction,
+  }) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DropdownButtonFormField<String>(
+        initialValue: value,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: label),
+        items: _kSecurityQuestions
+            .map((q) => DropdownMenuItem<String>(
+                  value: q,
+                  child: Text(q, overflow: TextOverflow.ellipsis),
+                ))
+            .toList(),
+        onChanged: onChanged,
+        validator: (v) {
+          if (v == null || v.isEmpty) return 'Select a question.';
+          if (others.contains(v)) return 'Please choose 3 different questions.';
+          return null;
+        },
+      ),
+      const SizedBox(height: 8),
+      TextFormField(
+        controller: answerController,
+        textInputAction: answerAction,
+        decoration: const InputDecoration(labelText: 'Your answer'),
+        validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your answer.' : null,
+      ),
+    ]);
   }
 }

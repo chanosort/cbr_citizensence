@@ -84,6 +84,9 @@ class User(Base):
     # Email must be verified before the account can log in
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class ComplaintRow(Base):
@@ -174,6 +177,22 @@ class Announcement(Base):
     reviewed_by_name: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
+class LoginAttempt(Base):
+    __tablename__ = 'citizensense_login_attempts'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
+    ip_address: Mapped[str] = mapped_column(String(64), index=True)
+    account: Mapped[Optional[str]] = mapped_column(String(254), nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+class SecurityQuestion(Base):
+    __tablename__ = 'citizensense_security_questions'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    question: Mapped[str] = mapped_column(String(255))
+    answer_hash: Mapped[str] = mapped_column(String(256))
+    position: Mapped[int] = mapped_column(Integer, default=1)
+
 Base.metadata.create_all(bind=engine)
 
 def _run_migrations(db_engine):
@@ -193,7 +212,12 @@ def _run_migrations(db_engine):
                 ('feedback_comment', 'TEXT'),
                 ('feedback_at', 'TIMESTAMP'),
             ]
-        ] + ['ALTER TABLE citizensense_users ADD COLUMN avatar_url VARCHAR(255)']
+        ] + [
+            'ALTER TABLE citizensense_users ADD COLUMN avatar_url VARCHAR(255)',
+            'ALTER TABLE citizensense_users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0',
+            'ALTER TABLE citizensense_users ADD COLUMN locked_until TIMESTAMP',
+            'ALTER TABLE citizensense_users ADD COLUMN last_active_at TIMESTAMP',
+        ]
         for stmt in alters:
             try:
                 with db_engine.begin() as conn:
@@ -326,9 +350,32 @@ def ok(data): return {'data': data}
 def fail(status, code, message, details=None):
     raise HTTPException(status_code=status, detail={'code': code, 'message': message, 'details': details or {}})
 
-# ─── Password ─────────────────────────────────────────────────────────────────
+# ─── Password & Security Policy ───────────────────────────────────────────────
 
-OTP_TTL_MINUTES = 10
+OTP_TTL_MINUTES = 5
+IDLE_TIMEOUT_MINUTES = 15
+IP_BLOCK_THRESHOLD = 10
+IP_BLOCK_WINDOW_MINUTES = 10
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get('x-forwarded-for', '').strip()
+    if fwd:
+        return fwd.split(',')[0].strip()[:64]
+    return (request.client.host if request.client else 'unknown')[:64]
+
+def _normalize_answer(answer: str) -> str:
+    return re.sub(r'\s+', ' ', answer.strip().lower())
+
+def _hash_answer(answer: str) -> str:
+    return hash_password(_normalize_answer(answer))
+
+def _verify_answer(answer: str, stored_hash: str) -> bool:
+    return verify_password(_normalize_answer(answer), stored_hash)
+
+def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
@@ -519,6 +566,13 @@ def current_user(authorization: Optional[str] = Header(default=None), db: Sessio
     user = db.get(User, int(payload['sub']))
     if not user or not user.active:
         raise HTTPException(401, detail={'code': 'UNAUTHORIZED', 'message': 'Account unavailable.', 'details': {}})
+    now = datetime.now(timezone.utc)
+    last_active = _as_utc(user.last_active_at)
+    if last_active is not None and (now - last_active) > timedelta(minutes=IDLE_TIMEOUT_MINUTES):
+        raise HTTPException(401, detail={'code': 'SESSION_IDLE_TIMEOUT', 'message': 'Your session expired after 15 minutes of inactivity. Please log in again.', 'details': {}})
+    if last_active is None or (now - last_active) > timedelta(seconds=30):
+        user.last_active_at = now
+        db.commit()
     return user
 
 def require_role(user: User, *roles):
@@ -679,11 +733,16 @@ def complaint_json(c: ComplaintRow, db: Session, user_obj=None, mask_citizen: bo
 
 # ─── Request schemas ──────────────────────────────────────────────────────────
 
+class SecurityQuestionIn(BaseModel):
+    question: str = Field(min_length=5, max_length=255)
+    answer: str = Field(min_length=1, max_length=200)
+
 class RegisterIn(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     username: str = Field(min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_]+$')
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    security_questions: list[SecurityQuestionIn] = Field(min_length=3, max_length=3)
     # office_id intentionally omitted — public registration is citizens-only.
 
 class VerifyEmailIn(BaseModel):
@@ -698,9 +757,16 @@ class LoginIn(BaseModel):
     email: Optional[str] = None
     password: str
 
+class ForgotQuestionsIn(BaseModel):
+    account: Optional[str] = None
+    email: Optional[str] = None
+
 class ForgotPasswordIn(BaseModel):
     account: Optional[str] = None
     email: Optional[str] = None
+    question_id: int
+    answer: str = Field(min_length=1, max_length=200)
+    confirm_answer: str = Field(min_length=1, max_length=200)
 
 class ResetPasswordIn(BaseModel):
     account: Optional[str] = None
@@ -806,6 +872,14 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
     until it is verified via POST /api/auth/verify-email.
     """
     _validate_password_strength(data.password)
+    if len(data.security_questions) != 3:
+        raise HTTPException(422, detail={'code': 'INVALID_SECURITY_QUESTIONS', 'message': 'Please select 3 different security questions and provide answers.', 'details': {}})
+    distinct_qs = {q.question.strip().lower() for q in data.security_questions}
+    if len(distinct_qs) != 3:
+        raise HTTPException(422, detail={'code': 'DUPLICATE_SECURITY_QUESTIONS', 'message': 'Please choose 3 different security questions.', 'details': {}})
+    if any(not _normalize_answer(q.answer) for q in data.security_questions):
+        raise HTTPException(422, detail={'code': 'EMPTY_SECURITY_ANSWER', 'message': 'Please provide an answer for all 3 security questions.', 'details': {}})
+
     username = data.username.lower().strip()
     email = str(data.email).lower().strip()
 
@@ -827,6 +901,15 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
         email_verified=False,
     )
     db.add(user); db.commit(); db.refresh(user)
+
+    for idx, sq in enumerate(data.security_questions, start=1):
+        db.add(SecurityQuestion(
+            user_id=user.id,
+            question=sq.question.strip(),
+            answer_hash=_hash_answer(sq.answer),
+            position=idx,
+        ))
+    db.commit()
 
     # Also synchronize to users_tbl so it appears in pgAdmin
     try:
@@ -899,48 +982,143 @@ def resend_verification(data: ResendVerifyIn, db: Session = Depends(get_db)):
 # ─── Auth: Login ──────────────────────────────────────────────────────────────
 
 @app.post('/api/auth/login')
-def login(data: LoginIn, db: Session = Depends(get_db)):
+def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    ip = _client_ip(request)
     ident = str(data.account or data.email or '').lower().strip()
+
+    # 1. IP block check: 10+ failed attempts in 10 minutes across any account
+    ip_cutoff = now - timedelta(minutes=IP_BLOCK_WINDOW_MINUTES)
+    ip_failures = db.scalar(
+        select(func.count(LoginAttempt.id)).where(
+            LoginAttempt.ip_address == ip,
+            LoginAttempt.success == False,
+            LoginAttempt.created_at >= ip_cutoff,
+        )
+    ) or 0
+    if ip_failures >= IP_BLOCK_THRESHOLD:
+        raise HTTPException(429, detail={
+            'code': 'IP_BLOCKED',
+            'message': 'Too many failed login attempts from this IP address. Access is temporarily blocked for 10 minutes.',
+            'details': {},
+        })
+
     user = db.scalar(select(User).where(
         (func.lower(User.email) == ident) | (func.lower(User.username) == ident)
     ))
+
+    # 2. Account lockout check
+    if user and user.locked_until is not None:
+        locked_until = _as_utc(user.locked_until)
+        if locked_until and locked_until > now:
+            remaining = max(1, int((locked_until - now).total_seconds()) + 1)
+            raise HTTPException(429, detail={
+                'code': 'ACCOUNT_LOCKED',
+                'message': f'Account locked due to too many failed login attempts. Please wait {remaining} seconds before trying again.',
+                'details': {'retry_after': remaining},
+            })
+
+    # 3. Verify credentials
     if not user or not verify_password(data.password, user.password_hash) or not user.active:
+        db.add(LoginAttempt(ip_address=ip, account=ident, success=False, created_at=now))
+        if user:
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            cnt = user.failed_login_attempts
+            lock_secs = 0
+            if cnt >= 9 and cnt % 3 == 0:
+                lock_secs = 60
+            elif cnt == 6:
+                lock_secs = 30
+            elif cnt == 3:
+                lock_secs = 15
+            if lock_secs > 0:
+                user.locked_until = now + timedelta(seconds=lock_secs)
+                db.commit()
+                raise HTTPException(429, detail={
+                    'code': 'ACCOUNT_LOCKED',
+                    'message': f'Too many failed login attempts. Locked out for {lock_secs} seconds.',
+                    'details': {'retry_after': lock_secs},
+                })
+        db.commit()
         raise HTTPException(401, detail={'code': 'INVALID_CREDENTIALS', 'message': 'Username/email or password is incorrect.', 'details': {}})
+
     if not user.email_verified:
         raise HTTPException(403, detail={'code': 'EMAIL_NOT_VERIFIED', 'message': 'Please verify your email before logging in. Check your inbox for the verification code.', 'details': {}})
+
+    # Reset lockout counters & record active session timestamp
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_active_at = now
+    db.add(LoginAttempt(ip_address=ip, account=ident, success=True, created_at=now))
+    db.commit()
     _log_activity(db, user, 'login', f'{user.name} ({user.role}) logged in.', 'user', user.id)
     return ok({'user': user_json(user), 'token': make_token(user)})
 
 # ─── Auth: Forgot password ───────────────────────────────────────────────────
 
-@app.post('/api/auth/forgot-password')
-def forgot_password(data: ForgotPasswordIn, db: Session = Depends(get_db)):
-    """Send an account recovery OTP to the email on file. Accepts username or email."""
+def _mask_email(email: str) -> str:
+    parts = email.split('@')
+    if len(parts) == 2:
+        n, d = parts[0], parts[1]
+        masked_name = (n[0] + '***' + n[-1]) if len(n) > 2 else (n[0] + '***')
+        return f'{masked_name}@{d}'
+    return ''
+
+@app.post('/api/auth/forgot-password/questions')
+def forgot_password_questions(data: ForgotQuestionsIn, db: Session = Depends(get_db)):
+    """Return the user's 3 registered security questions so they can pick 1 to answer twice."""
     ident = str(data.account or data.email or '').lower().strip()
     user = db.scalar(select(User).where(
         (func.lower(User.email) == ident) | (func.lower(User.username) == ident)
     ))
-    masked_email = ''
-    if user and user.active:
-        code = _issue_otp(db, user.email, 'reset_password')
-        _send_email_async(
-            to=user.email,
-            subject='CBR CitizenSense – Account Recovery Code',
-            body=(
-                f'Hi {user.name},\n\n'
-                f'You requested an account recovery code for your CitizenSense account (@{user.username or user.name}).\n\n'
-                f'Your recovery code is: {code}\n\n'
-                f'This code expires in {OTP_TTL_MINUTES} minutes.\n\n'
-                'If you did not request this, please ignore this email and your password will remain unchanged.\n\n'
-                '— CBR CitizenSense Team'
-            ),
-        )
-        parts = user.email.split('@')
-        if len(parts) == 2:
-            n, d = parts[0], parts[1]
-            masked_name = (n[0] + '***' + n[-1]) if len(n) > 2 else (n[0] + '***')
-            masked_email = f'{masked_name}@{d}'
-    return ok({'message': 'If that account is registered, a reset code has been sent.', 'email': masked_email})
+    if not user or not user.active:
+        raise HTTPException(404, detail={'code': 'ACCOUNT_NOT_FOUND', 'message': 'No active account found with that username or email.', 'details': {}})
+    qs = list(db.scalars(
+        select(SecurityQuestion)
+        .where(SecurityQuestion.user_id == user.id)
+        .order_by(SecurityQuestion.position.asc(), SecurityQuestion.id.asc())
+    ))
+    if not qs:
+        raise HTTPException(400, detail={'code': 'NO_SECURITY_QUESTIONS', 'message': 'This account has no security questions configured.', 'details': {}})
+    return ok({
+        'email': _mask_email(user.email),
+        'questions': [{'id': q.id, 'question': q.question} for q in qs],
+    })
+
+@app.post('/api/auth/forgot-password')
+def forgot_password(data: ForgotPasswordIn, db: Session = Depends(get_db)):
+    """Verify the selected security question (answered twice), then send an OTP to the registered email."""
+    ident = str(data.account or data.email or '').lower().strip()
+    user = db.scalar(select(User).where(
+        (func.lower(User.email) == ident) | (func.lower(User.username) == ident)
+    ))
+    if not user or not user.active:
+        raise HTTPException(404, detail={'code': 'ACCOUNT_NOT_FOUND', 'message': 'No active account found with that username or email.', 'details': {}})
+
+    if _normalize_answer(data.answer) != _normalize_answer(data.confirm_answer):
+        raise HTTPException(400, detail={'code': 'ANSWER_MISMATCH', 'message': 'Your two answers do not match. Please type the exact same answer twice.', 'details': {}})
+
+    q = db.scalar(select(SecurityQuestion).where(
+        SecurityQuestion.id == data.question_id,
+        SecurityQuestion.user_id == user.id,
+    ))
+    if not q or not _verify_answer(data.answer, q.answer_hash):
+        raise HTTPException(401, detail={'code': 'INVALID_SECURITY_ANSWER', 'message': 'Security question answer is incorrect.', 'details': {}})
+
+    code = _issue_otp(db, user.email, 'reset_password')
+    _send_email_async(
+        to=user.email,
+        subject='CBR CitizenSense – Account Recovery Code',
+        body=(
+            f'Hi {user.name},\n\n'
+            f'You verified your security question for your CitizenSense account (@{user.username or user.name}).\n\n'
+            f'Your recovery code is: {code}\n\n'
+            f'This code expires in {OTP_TTL_MINUTES} minutes.\n\n'
+            'If you did not request this, please ignore this email and your password will remain unchanged.\n\n'
+            '— CBR CitizenSense Team'
+        ),
+    )
+    return ok({'message': 'Security answer verified. A recovery code has been sent to your registered email.', 'email': _mask_email(user.email)})
 
 # ─── Auth: Verify reset code (before typing new password) ────────────────────
 

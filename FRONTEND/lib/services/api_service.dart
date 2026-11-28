@@ -23,6 +23,12 @@ class ApiException implements Exception {
       : '$message\n${details.values.map((v) => '• $v').join('\n')}';
 }
 
+class SecurityQuestionChoice {
+  final int id;
+  final String question;
+  const SecurityQuestionChoice({required this.id, required this.question});
+}
+
 abstract class ApiService {
   void setToken(String? token);
 
@@ -34,6 +40,7 @@ abstract class ApiService {
     required String username,
     required String email,
     required String password,
+    required List<Map<String, String>> securityQuestions,
   });
 
   /// Verify the email OTP sent after registration.
@@ -42,8 +49,18 @@ abstract class ApiService {
   /// Resend verification OTP.
   Future<void> resendVerification({required String email});
 
-  /// Request an account recovery OTP (accepts username or email; code sent to email).
-  Future<String?> forgotPassword({required String email});
+  /// Fetch the user's 3 registered security questions for account recovery.
+  Future<({String email, List<SecurityQuestionChoice> questions})> getForgotPasswordQuestions({
+    required String email,
+  });
+
+  /// Verify the chosen security question (answered twice) and send recovery OTP.
+  Future<String?> forgotPassword({
+    required String email,
+    required int questionId,
+    required String answer,
+    required String confirmAnswer,
+  });
 
   /// Verify reset OTP before allowing user to type a new password.
   Future<void> verifyResetCode({required String email, required String code});
@@ -220,12 +237,14 @@ class HttpApiService implements ApiService {
     required String username,
     required String email,
     required String password,
+    required List<Map<String, String>> securityQuestions,
   }) async {
     await _post('/api/auth/register', {
       'name': name,
       'username': username,
       'email': email,
       'password': password,
+      'security_questions': securityQuestions,
     });
   }
 
@@ -240,8 +259,33 @@ class HttpApiService implements ApiService {
   }
 
   @override
-  Future<String?> forgotPassword({required String email}) async {
-    final res = await _post('/api/auth/forgot-password', {'account': email, 'email': email});
+  Future<({String email, List<SecurityQuestionChoice> questions})> getForgotPasswordQuestions({
+    required String email,
+  }) async {
+    final res = await _post('/api/auth/forgot-password/questions', {'account': email, 'email': email});
+    final qs = ((res['questions'] as List?) ?? const [])
+        .map((e) => SecurityQuestionChoice(
+              id: ((e as Map)['id'] as num).toInt(),
+              question: (e['question'] as String?) ?? '',
+            ))
+        .toList();
+    return (email: (res['email'] as String?) ?? '', questions: qs);
+  }
+
+  @override
+  Future<String?> forgotPassword({
+    required String email,
+    required int questionId,
+    required String answer,
+    required String confirmAnswer,
+  }) async {
+    final res = await _post('/api/auth/forgot-password', {
+      'account': email,
+      'email': email,
+      'question_id': questionId,
+      'answer': answer,
+      'confirm_answer': confirmAnswer,
+    });
     return res['email'] as String?;
   }
 
@@ -782,6 +826,7 @@ class MockApiService implements ApiService {
     required String username,
     required String email,
     required String password,
+    required List<Map<String, String>> securityQuestions,
   }) async {
     await _lag();
     final keyEmail = email.trim().toLowerCase();
@@ -827,7 +872,27 @@ class MockApiService implements ApiService {
   }
 
   @override
-  Future<String?> forgotPassword({required String email}) async {
+  Future<({String email, List<SecurityQuestionChoice> questions})> getForgotPasswordQuestions({
+    required String email,
+  }) async {
+    await _lag(400);
+    return (
+      email: email.trim(),
+      questions: const [
+        SecurityQuestionChoice(id: 1, question: 'What is the name of your elementary school?'),
+        SecurityQuestionChoice(id: 2, question: "What is your pet's name?"),
+        SecurityQuestionChoice(id: 3, question: 'What is the name of your best friend?'),
+      ],
+    );
+  }
+
+  @override
+  Future<String?> forgotPassword({
+    required String email,
+    required int questionId,
+    required String answer,
+    required String confirmAnswer,
+  }) async {
     await _lag(500);
     final key = email.trim().toLowerCase();
     _MockUser? u;

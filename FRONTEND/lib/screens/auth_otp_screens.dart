@@ -121,7 +121,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Forgot Password Screen — Step 1: enter email
+// Forgot Password Screen — Step 1: enter account, Step 2: choose 1 question & answer twice
 // ─────────────────────────────────────────────────────────────────────────────
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -133,6 +133,11 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _account = TextEditingController();
+  final _answer1 = TextEditingController();
+  final _answer2 = TextEditingController();
+  List<SecurityQuestionChoice> _questions = const [];
+  int? _selectedQuestionId;
+  String? _localError;
 
   @override
   void initState() {
@@ -145,14 +150,55 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _account.dispose();
+    _answer1.dispose();
+    _answer2.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  Future<void> _lookupQuestions() async {
     final account = _account.text.trim();
-    if (account.isEmpty) return;
+    if (account.isEmpty) {
+      setState(() => _localError = 'Enter your username or email address.');
+      return;
+    }
+    setState(() => _localError = null);
     final auth = context.read<AuthProvider>();
-    final hint = await auth.forgotPassword(email: account);
+    final res = await auth.fetchForgotPasswordQuestions(email: account);
+    if (res != null && mounted) {
+      setState(() {
+        _questions = res.questions;
+        _selectedQuestionId = res.questions.isNotEmpty ? res.questions.first.id : null;
+        _answer1.clear();
+        _answer2.clear();
+      });
+    }
+  }
+
+  Future<void> _submitAnswer() async {
+    final account = _account.text.trim();
+    final qId = _selectedQuestionId;
+    final a1 = _answer1.text.trim();
+    final a2 = _answer2.text.trim();
+    if (qId == null) {
+      setState(() => _localError = 'Select one of your security questions.');
+      return;
+    }
+    if (a1.isEmpty || a2.isEmpty) {
+      setState(() => _localError = 'Please type your answer twice.');
+      return;
+    }
+    if (a1.toLowerCase() != a2.toLowerCase()) {
+      setState(() => _localError = 'Your two answers do not match. Please type the same answer twice.');
+      return;
+    }
+    setState(() => _localError = null);
+    final auth = context.read<AuthProvider>();
+    final hint = await auth.forgotPassword(
+      email: account,
+      questionId: qId,
+      answer: a1,
+      confirmAnswer: a2,
+    );
     if (hint != null && mounted) {
       context.go('/reset-password?account=${Uri.encodeComponent(account)}&email=${Uri.encodeComponent(hint)}');
     }
@@ -161,41 +207,96 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final hasQuestions = _questions.isNotEmpty;
+    final bannerMsg = _localError ?? auth.error;
 
     return AuthLayout(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('Forgot your account?',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        const Text(
-          'Enter your username or email address. We will send a verification code to the registered email on file.',
-          style: TextStyle(color: AppColors.muted),
+        Text(
+          hasQuestions
+              ? 'Choose 1 of your security questions and type the answer twice. When verified, a recovery code will be sent to your registered email.'
+              : 'Enter your username or email address to load your security questions.',
+          style: const TextStyle(color: AppColors.muted),
         ),
         const SizedBox(height: 22),
-        if (auth.error != null) ...[
-          MessageBanner(message: auth.error!),
+        if (bannerMsg != null) ...[
+          MessageBanner(message: bannerMsg),
           const SizedBox(height: 16),
         ],
-        TextField(
-          controller: _account,
-          keyboardType: TextInputType.text,
-          textInputAction: TextInputAction.done,
-          autofillHints: const [AutofillHints.username, AutofillHints.email],
-          decoration: const InputDecoration(
-            labelText: 'Username or email address',
-            hintText: 'e.g. juan or juan@gmail.com',
+        if (!hasQuestions) ...[
+          TextField(
+            controller: _account,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.username, AutofillHints.email],
+            decoration: const InputDecoration(
+              labelText: 'Username or email address',
+              hintText: 'e.g. juan or juan@gmail.com',
+            ),
+            onSubmitted: (_) => auth.busy ? null : _lookupQuestions(),
           ),
-          onSubmitted: (_) => auth.busy ? null : _submit(),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: auth.busy ? null : _submit,
-          child: auth.busy
-              ? const SizedBox(
-                  width: 22, height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-              : const Text('Send recovery code'),
-        ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: auth.busy ? null : _lookupQuestions,
+            child: auth.busy
+                ? const SizedBox(
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                : const Text('Continue'),
+          ),
+        ] else ...[
+          DropdownButtonFormField<int>(
+            initialValue: _selectedQuestionId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Select a security question'),
+            items: _questions
+                .map((q) => DropdownMenuItem<int>(
+                      value: q.id,
+                      child: Text(q.question, overflow: TextOverflow.ellipsis),
+                    ))
+                .toList(),
+            onChanged: (v) => setState(() => _selectedQuestionId = v),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _answer1,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: 'Answer (1st entry)'),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _answer2,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(labelText: 'Confirm answer (2nd entry)'),
+            onSubmitted: (_) => auth.busy ? null : _submitAnswer(),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: auth.busy ? null : _submitAnswer,
+            child: auth.busy
+                ? const SizedBox(
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                : const Text('Verify & send recovery code'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: auth.busy
+                ? null
+                : () {
+                    context.read<AuthProvider>().clearError();
+                    setState(() {
+                      _questions = const [];
+                      _selectedQuestionId = null;
+                      _localError = null;
+                    });
+                  },
+            child: const Text('Use a different username or email'),
+          ),
+        ],
         const SizedBox(height: 10),
         TextButton(
           onPressed: () => context.go('/login'),
