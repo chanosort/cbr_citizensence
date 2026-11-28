@@ -147,9 +147,18 @@ class _Sidebar extends StatelessWidget {
               SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('CitizenSense',
-                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                  Text('Cabadbaran City', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text('CitizenSense',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                  ),
+                  Text('Cabadbaran City',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ]),
               ),
             ]),
@@ -172,8 +181,13 @@ class _Sidebar extends StatelessWidget {
                 CircleAvatar(
                   radius: 19,
                   backgroundColor: Colors.white,
-                  child: Text(user.initials,
-                      style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 13)),
+                  backgroundImage: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                      ? NetworkImage(context.read<ApiService>().getAvatarUrl(user.avatarUrl))
+                      : null,
+                  child: (user.avatarUrl == null || user.avatarUrl!.isEmpty)
+                      ? Text(user.initials,
+                          style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 13))
+                      : null,
                 ),
                 const SizedBox(width: 10),
                 Expanded(

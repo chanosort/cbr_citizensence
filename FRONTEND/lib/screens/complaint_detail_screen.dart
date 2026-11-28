@@ -9,7 +9,7 @@ import '../models/models.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/app_shell.dart';
-import '../widgets/auth_layout.dart' show MessageBanner;
+import '../widgets/auth_layout.dart' show MessageBanner, showCenterPromptDialog;
 import '../widgets/chips.dart';
 import '../widgets/classification_card.dart';
 
@@ -113,6 +113,14 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
             const SizedBox(height: 18),
             _UpdateCard(d: d, onDone: () => _load(quiet: true)),
           ],
+          if (role == UserRole.citizen || d.complaint.rating != null) ...[
+            const SizedBox(height: 18),
+            _FeedbackCard(
+              complaint: d.complaint,
+              canRate: role == UserRole.citizen,
+              onDone: () => _load(quiet: true),
+            ),
+          ],
         ]);
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
@@ -182,7 +190,7 @@ class _Main extends StatelessWidget {
           const SizedBox(height: 16),
           kv('Category', categoryById(c.categoryId).name),
           kv('Sent to', officeById(c.officeId).name),
-          kv('Location', d.locationName.isEmpty ? '—' : d.locationName),
+          kv('Location', d.locationName.isEmpty ? 'â€”' : d.locationName),
           kv('Submitted', fmtDate(c.createdAt)),
           if (showCitizen && c.citizenName.isNotEmpty) kv('Filed by', c.citizenName),
           const Divider(color: AppColors.line, height: 28),
@@ -214,7 +222,7 @@ class _Main extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(r.message, style: const TextStyle(height: 1.45)),
                   const SizedBox(height: 6),
-                  Text('${r.staffName} · ${fmtDate(r.createdAt)}',
+                  Text('${r.staffName} Â· ${fmtDate(r.createdAt)}',
                       style: const TextStyle(color: AppColors.muted, fontSize: 12)),
                 ]),
               ),
@@ -282,6 +290,163 @@ class _Timeline extends StatelessWidget {
   }
 }
 
+class _FeedbackCard extends StatefulWidget {
+  const _FeedbackCard({required this.complaint, required this.canRate, required this.onDone});
+  final Complaint complaint;
+  final bool canRate;
+  final VoidCallback onDone;
+
+  @override
+  State<_FeedbackCard> createState() => _FeedbackCardState();
+}
+
+class _FeedbackCardState extends State<_FeedbackCard> {
+  final _comment = TextEditingController();
+  int _rating = 0;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _rating = widget.complaint.rating ?? 0;
+    _comment.text = widget.complaint.feedbackComment ?? '';
+  }
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_rating < 1 || _rating > 5) {
+      setState(() => _error = 'Please select a star rating (1 to 5).');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await context.read<ApiService>().submitComplaintFeedback(
+            complaintId: widget.complaint.id,
+            rating: _rating,
+            comment: _comment.text.trim().isEmpty ? null : _comment.text.trim(),
+          );
+      if (!mounted) return;
+      setState(() => _saving = false);
+      widget.onDone();
+      await showCenterPromptDialog(
+        context,
+        title: 'Feedback Submitted',
+        message: 'Thank you for rating this service ($_rating/5 stars).',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e.displayMessage;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Could not submit feedback. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.complaint;
+    final isResolved = c.status == ComplaintStatus.resolved || c.status == ComplaintStatus.closed;
+    final alreadyRated = c.rating != null;
+
+    return _Box(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(children: [
+            Icon(Icons.star_rate_rounded, color: AppColors.gold, size: 22),
+            SizedBox(width: 6),
+            Text('Citizen Feedback & Rating', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 10),
+          if (alreadyRated) ...[
+            Row(children: [
+              for (var i = 1; i <= 5; i++)
+                Icon(
+                  i <= (c.rating ?? 0) ? Icons.star_rounded : Icons.star_border_rounded,
+                  color: AppColors.gold,
+                  size: 28,
+                ),
+              const SizedBox(width: 8),
+              Text('${c.rating}/5', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            ]),
+            if ((c.feedbackComment ?? '').isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppColors.panel, borderRadius: BorderRadius.circular(12)),
+                child: Text(c.feedbackComment!, style: const TextStyle(height: 1.4)),
+              ),
+            ],
+          ] else if (!isResolved) ...[
+            const Text(
+              'You can rate and leave feedback once this complaint is Resolved or Closed.',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+          ] else if (widget.canRate) ...[
+            const Text('How satisfied are you with the resolution?', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              children: [
+                for (var i = 1; i <= 5; i++)
+                  IconButton(
+                    tooltip: '$i star${i > 1 ? 's' : ''}',
+                    onPressed: _saving ? null : () => setState(() => _rating = i),
+                    icon: Icon(
+                      i <= _rating ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: AppColors.gold,
+                      size: 32,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _comment,
+              minLines: 2,
+              maxLines: 4,
+              maxLength: 400,
+              decoration: const InputDecoration(
+                labelText: 'Feedback comment (optional)',
+                hintText: 'Share your experience with the office response...',
+                alignLabelWithHint: true,
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              MessageBanner(message: _error!),
+            ],
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: _saving ? null : _submit,
+              child: _saving
+                  ? const SizedBox(
+                      width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                  : const Text('Submit Feedback'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// EP-07: PATCH /api/complaints/{id}/status. Only legal next statuses are offered.
 class _UpdateCard extends StatefulWidget {
   const _UpdateCard({required this.d, required this.onDone});
@@ -327,7 +492,6 @@ class _UpdateCardState extends State<_UpdateCard> {
     if (ok != true || !mounted) return;
 
     final api = context.read<ApiService>();
-    final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _saving = true;
       _error = null;
@@ -335,13 +499,39 @@ class _UpdateCardState extends State<_UpdateCard> {
     try {
       await api.updateStatus(id: widget.d.complaint.id, status: next, message: _msg.text);
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('Status updated to ${next.label}.')));
       _msg.clear();
       setState(() {
         _saving = false;
         _next = null;
       });
       widget.onDone();
+      // Show a centered success dialog instead of a bottom snackbar
+      if (mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 56),
+            title: const Text('Status Updated', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+            content: Text(
+              'Complaint status has been changed to ${next.label}.\nThe citizen will be notified of this update.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(height: 1.5),
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Text('OK'),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -566,3 +756,4 @@ class _VerificationPhotoCard extends StatelessWidget {
     ]);
   }
 }
+

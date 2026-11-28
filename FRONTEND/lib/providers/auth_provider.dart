@@ -37,8 +37,8 @@ class AuthProvider extends ChangeNotifier {
       } else {
         loginCooldownSeconds--;
         error = ipBlocked
-            ? 'Too many failed login attempts from this IP. Please wait ${loginCooldownSeconds}s.'
-            : 'Account locked due to too many failed login attempts. Please wait ${loginCooldownSeconds}s before trying again.';
+            ? 'Too many failed login attempts from this IP. Please wait $loginCooldownSeconds seconds.'
+            : 'Account locked due to too many failed login attempts. Please wait $loginCooldownSeconds seconds before trying again.';
       }
       notifyListeners();
     });
@@ -125,7 +125,10 @@ class AuthProvider extends ChangeNotifier {
         final secs = rawRetry is int
             ? rawRetry
             : int.tryParse('${rawRetry ?? ''}') ?? (e.code == 'IP_BLOCKED' ? 600 : 15);
-        error = e.message;
+        // Use a clean message without bullet-point details
+        error = e.code == 'IP_BLOCKED'
+            ? 'Too many failed login attempts from this IP. Please wait ${secs}s.'
+            : 'Account locked due to too many failed login attempts. Please wait $secs seconds before trying again.';
         _startLoginCooldown(secs, ipBlocked: e.code == 'IP_BLOCKED');
       } else {
         error = e.displayMessage;
@@ -251,6 +254,25 @@ class AuthProvider extends ChangeNotifier {
         answer: answer,
         confirmAnswer: confirmAnswer,
       );
+      busy = false;
+      notifyListeners();
+      return hint ?? email.trim();
+    } on ApiException catch (e) {
+      error = e.displayMessage;
+    } catch (_) {
+      error = 'Something went wrong. Please try again.';
+    }
+    busy = false;
+    notifyListeners();
+    return null;
+  }
+
+  Future<String?> resendResetCode({required String email}) async {
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      final hint = await _api.resendResetCode(email: email.trim());
       busy = false;
       notifyListeners();
       return hint ?? email.trim();

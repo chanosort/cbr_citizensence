@@ -28,15 +28,20 @@ class AuthLayout extends StatelessWidget {
                     children: [
                       const SealLogo(size: 72),
                       const SizedBox(height: 8),
-                      Text(
-                        'Cabadbaran CitizenSense',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.navy),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Cabadbaran CitizenSense',
+                          maxLines: 1,
+                          softWrap: false,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.navy),
+                        ),
                       ),
                       const SizedBox(height: 18),
                       child,
@@ -212,4 +217,49 @@ class MessageBanner extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Centered prompt dialog used instead of bottom SnackBars for important updates.
+Future<void> showCenterPromptDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  bool good = true,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      icon: Icon(
+        good ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+        color: good ? AppColors.forest : AppColors.star,
+        size: 52,
+      ),
+      title: Text(
+        title,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(height: 1.45),
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: Text('OK'),
+          ),
+        ),
+      ],
+    ),
+  );
 }

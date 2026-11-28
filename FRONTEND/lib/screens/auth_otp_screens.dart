@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -26,6 +28,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   final _code = TextEditingController();
   String? _fieldError;
   bool _resent = false;
+  int _resendCooldown = 0;
+  Timer? _resendTimer;
 
   @override
   void initState() {
@@ -37,8 +41,26 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _code.dispose();
     super.dispose();
+  }
+
+  void _startResendCooldown() {
+    _resendTimer?.cancel();
+    setState(() => _resendCooldown = 60);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_resendCooldown <= 1) {
+        t.cancel();
+        setState(() => _resendCooldown = 0);
+      } else {
+        setState(() => _resendCooldown--);
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -56,9 +78,13 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   }
 
   Future<void> _resend() async {
+    if (_resendCooldown > 0) return;
     final auth = context.read<AuthProvider>();
     final ok = await auth.resendVerification(email: widget.email);
-    if (ok && mounted) setState(() => _resent = true);
+    if (ok && mounted) {
+      setState(() => _resent = true);
+      _startResendCooldown();
+    }
   }
 
   @override
@@ -108,8 +134,10 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
         ),
         const SizedBox(height: 10),
         TextButton(
-          onPressed: auth.busy ? null : _resend,
-          child: const Text("Didn't receive a code? Resend"),
+          onPressed: (auth.busy || _resendCooldown > 0) ? null : _resend,
+          child: Text(_resendCooldown > 0
+              ? 'Resend code in ${_resendCooldown}s'
+              : "Didn't receive a code? Resend"),
         ),
         TextButton(
           onPressed: () => context.go('/login'),
@@ -327,6 +355,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscure = true;
   bool _codeVerified = false;
   bool _verifyingCode = false;
+  bool _resent = false;
+  int _resendCooldown = 0;
+  Timer? _resendTimer;
   String? _codeError;
 
   @override
@@ -339,10 +370,41 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _code.dispose();
     _newPassword.dispose();
     _confirm.dispose();
     super.dispose();
+  }
+
+  void _startResendCooldown() {
+    _resendTimer?.cancel();
+    setState(() => _resendCooldown = 60);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_resendCooldown <= 1) {
+        t.cancel();
+        setState(() => _resendCooldown = 0);
+      } else {
+        setState(() => _resendCooldown--);
+      }
+    });
+  }
+
+  Future<void> _resendCode() async {
+    if (_resendCooldown > 0) return;
+    final auth = context.read<AuthProvider>();
+    final hint = await auth.resendResetCode(email: _target);
+    if (hint != null && mounted) {
+      setState(() {
+        _resent = true;
+        _codeError = null;
+      });
+      _startResendCooldown();
+    }
   }
 
   String get _target => (widget.account != null && widget.account!.isNotEmpty)
@@ -427,6 +489,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const MessageBanner(message: 'Verification code confirmed! You may now type your new password.', good: true),
           const SizedBox(height: 16),
         ],
+        if (_resent && auth.error == null && !_codeVerified) ...[
+          const MessageBanner(message: 'A new recovery code has been sent to your registered email.', good: true),
+          const SizedBox(height: 16),
+        ],
         if (auth.error != null) ...[
           MessageBanner(message: auth.error!),
           const SizedBox(height: 16),
@@ -463,7 +529,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             decoration: InputDecoration(
               labelText: 'New password',
               helperText: kPasswordRuleHint,
-              helperMaxLines: 2,
+              helperMaxLines: 3,
+              errorMaxLines: 3,
               errorText: _newPassword.text.isNotEmpty ? validatePassword(_newPassword.text, strict: true) : _codeError,
               suffixIcon: IconButton(
                 tooltip: _obscure ? 'Show password' : 'Hide password',
@@ -471,6 +538,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -497,10 +565,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
         ],
         const SizedBox(height: 10),
-        TextButton(
-          onPressed: () => context.go('/forgot-password'),
-          child: const Text('Resend code'),
-        ),
+        if (!_codeVerified)
+          TextButton(
+            onPressed: (auth.busy || _resendCooldown > 0) ? null : _resendCode,
+            child: Text(_resendCooldown > 0 ? 'Resend code in ${_resendCooldown}s' : 'Resend code'),
+          ),
         TextButton(
           onPressed: () => context.go('/login'),
           child: const Text('Back to login'),

@@ -18,9 +18,14 @@ class ApiException implements Exception {
   const ApiException(this.status, this.code, this.message,
       {this.details = const <String, dynamic>{}});
 
-  String get displayMessage => details.isEmpty
-      ? message
-      : '$message\n${details.values.map((v) => '• $v').join('\n')}';
+  String get displayMessage {
+    if (details.isEmpty) return message;
+    // Filter out technical/numeric fields like retry_after from bullet display
+    final userFacing = details.entries
+        .where((e) => e.key != 'retry_after')
+        .map((e) => '• ${e.value}');
+    return userFacing.isEmpty ? message : '$message\n${userFacing.join('\n')}';
+  }
 }
 
 class SecurityQuestionChoice {
@@ -61,6 +66,9 @@ abstract class ApiService {
     required String answer,
     required String confirmAnswer,
   });
+
+  /// Resend password-reset OTP to the user's registered email without leaving the reset page.
+  Future<String?> resendResetCode({required String email});
 
   /// Verify reset OTP before allowing user to type a new password.
   Future<void> verifyResetCode({required String email, required String code});
@@ -135,7 +143,7 @@ abstract class ApiService {
   Future<AppUser> uploadAvatar(List<int> bytes, String fileName);
   Future<void> requestEmailChange({required String currentPassword, required String newEmail});
   Future<AppUser> confirmEmailChange({required String newEmail, required String code});
-  Future<List<ActivityLogItem>> adminActivityLogs({String? role});
+  Future<List<ActivityLogItem>> adminActivityLogs({String? role, int? actorId, String? search});
   String getAvatarUrl(String? avatarUrl);
   String getAttachmentUrl(int complaintId);
   Map<String, String> get authHeaders;
@@ -287,6 +295,15 @@ class HttpApiService implements ApiService {
       'confirm_answer': confirmAnswer,
     });
     return res['email'] as String?;
+  }
+
+  @override
+  Future<String?> resendResetCode({required String email}) async {
+    final d = await _post('/api/auth/resend-reset-code', {
+      'account': email,
+      'email': email,
+    });
+    return d['email'] as String?;
   }
 
   @override
@@ -598,9 +615,11 @@ class HttpApiService implements ApiService {
   }
 
   @override
-  Future<List<ActivityLogItem>> adminActivityLogs({String? role}) async {
+  Future<List<ActivityLogItem>> adminActivityLogs({String? role, int? actorId, String? search}) async {
     final q = <String, String>{};
     if (role != null && role.isNotEmpty) q['role'] = role;
+    if (actorId != null) q['actor_id'] = '$actorId';
+    if (search != null && search.trim().isNotEmpty) q['search'] = search.trim();
     return _items(await _get('/api/admin/activity-logs', q.isEmpty ? null : q))
         .map(ActivityLogItem.fromJson)
         .toList();
@@ -791,9 +810,15 @@ class MockApiService implements ApiService {
   }
 
   @override
-  Future<List<ActivityLogItem>> adminActivityLogs({String? role}) async {
+  Future<List<ActivityLogItem>> adminActivityLogs({String? role, int? actorId, String? search}) async {
     await _lag();
     return const [];
+  }
+
+  @override
+  Future<String?> resendResetCode({required String email}) async {
+    await _lag();
+    return email;
   }
 
   @override

@@ -261,6 +261,12 @@ _NEGATION_WORDS = {
     'walay', 'wala', 'dili', 'di', 'walang', 'hindi', 'diay',
 }
 
+# Only explicit positive-inverting negators should flip positive words to negative
+# (Cebuano/Tagalog 'walay'/'dili'/'hindi' before a problem word is still negative, not positive!)
+_SENTIMENT_NEGATORS = {
+    'no', 'not', 'never', "don't", 'dont', "isn't", 'isnt', 'dili', 'di', 'hindi', 'wala',
+}
+
 _INTENSIFIERS = {
     'very', 'extremely', 'severely', 'urgently', 'immediately', 'critical',
     'grabe', 'kaayo', 'pwerte', 'sobra', 'sobrang', 'napaka', 'agad', 'karon',
@@ -298,7 +304,46 @@ _NEGATIVE_WORDS = {
     'baho', 'hugaw', 'guba', 'sira', 'mabaho', 'marumi', 'saba', 'ingay', 'grabe',
     'baha', 'flood', 'broken', 'leak', 'clogged', 'uncollected', 'delayed', 'delikado',
     'laina', 'walang', 'walay', 'problema', 'problem', 'hazard', 'urgent',
+    'ayaw', 'dili', 'hindi', 'wala', 'ngitngit', 'madilim', 'lubak', 'butas',
+    'barado', 'kawat', 'kawatan', 'away', 'sakit', 'dengue', 'rabies', 'trapik',
+    'traffic', 'aksidente', 'disgrasya', 'brownout', 'blackout', 'pundido', 'pundi',
+    'smelly', 'stinking', 'dirty', 'damaged', 'cracked', 'overflowing', 'stagnant',
+    'noisy', 'loud', 'reckless', 'harassment', 'threat', 'fail', 'failed', 'error',
+    'stuck', 'slow', 'lag', 'lagging', 'bulok', 'walang', 'kulang', 'lisod', 'kapoy',
 }
+
+_NEGATIVE_PHRASES = [
+    # Cebuano / Bisaya 2-word & sentence phrases
+    'ayaw nya', 'ayaw niya', 'ayaw mag', 'dili ma', 'dili lagi', 'dili mo', 'dili gana',
+    'dili ko', 'walay tubig', 'walay kuryente', 'walay suga', 'walay agas', 'walay aksyon',
+    'walay klaro', 'walay tabon', 'guba na', 'naguba na', 'baho kaayo', 'hugaw kaayo',
+    'saba kaayo', 'ngitngit kaayo', 'baha kaayo', 'barado ang kanal', 'nag try ko',
+    'pero ayaw', 'wala gi kolekta', 'wala gihakot', 'laina sa hangin', 'pwerte ka',
+    # Tagalog 2-word & sentence phrases
+    'hindi gumagana', 'hindi ma', 'hindi maayos', 'ayaw mag', 'ayaw gumana',
+    'walang tubig', 'walang ilaw', 'walang kuryente', 'walang aksyon', 'sira na',
+    'nasira na', 'sobrang baho', 'sobrang ingay', 'sobrang dilim', 'baradong kanal',
+    'hindi kinokolekta', 'napaka baho', 'napaka ingay',
+    # English 2-word & sentence phrases
+    'not working', 'does not work', 'did not work', 'cannot upload', 'cant upload',
+    'can not', 'failed to', 'no water', 'no electricity', 'no streetlight', 'no action',
+    'broken pipe', 'water leak', 'clogged drainage', 'foul odor', 'bad smell',
+    'too noisy', 'very dark', 'very dirty', 'please fix', 'need help', 'huge pothole',
+]
+
+_POSITIVE_PHRASES = [
+    'thank you', 'thanks a lot', 'good job', 'well done', 'great service',
+    'salamat kaayo', 'daghang salamat', 'maraming salamat', 'maayo kaayo',
+    'magandang serbisyo', 'naayo na', 'naayos na', 'fixed already', 'resolved already',
+]
+
+_APP_OFFTOPIC_PHRASES = [
+    'change picture', 'chnage picture', 'change the picture', 'chnage ang picture',
+    'change ang picture', 'upload picture', 'mag upload', 'ayaw mag upload',
+    'dili ma change', 'dili ma chnage', 'dili lagi ma chnage', 'hindi ma upload',
+    'profile photo', 'profile picture', 'avatar', 'cannot upload photo',
+    'app is slow', 'app bug', 'login problem', 'forgot password', 'how to use',
+]
 
 _POSITIVE_WORDS = {
     'thank', 'thanks', 'salamat', 'good', 'great', 'appreciate', 'maayo', 'maganda',
@@ -442,6 +487,16 @@ def _is_joke_or_spam(text: str, tokens: List[str]) -> Tuple[bool, List[str], str
     if len(profanity_tokens) >= 2 and not complaint_context and len(alpha_tokens) <= 5:
         return True, profanity_tokens[:5], f'Contains profanity without a real complaint: {", ".join(profanity_tokens[:5])}.'
 
+    # 7. App/technical/off-topic messages (not a city/community complaint)
+    if not complaint_context:
+        offtopic_hits = [p for p in _APP_OFFTOPIC_PHRASES if p in lower]
+        if offtopic_hits:
+            return (
+                True,
+                offtopic_hits[:3],
+                f'This looks like an app/upload or off-topic message ({", ".join(offtopic_hits[:2])}) rather than a city/community complaint.',
+            )
+
     return False, [], ''
 
 # Flat reference for profanity-with-no-context check (populated after class init)
@@ -456,6 +511,8 @@ def _extract_ngrams(tokens: List[str]) -> List[str]:
     grams = list(tokens)
     for i in range(len(tokens) - 1):
         grams.append(f"{tokens[i]}_{tokens[i + 1]}")
+    for i in range(len(tokens) - 2):
+        grams.append(f"{tokens[i]}_{tokens[i + 1]}_{tokens[i + 2]}")
     return grams
 
 
@@ -498,7 +555,92 @@ class HybridComplaintClassifier:
     def _gather_training_corpus(self) -> List[Tuple[str, str]]:
         corpus: List[Tuple[str, str]] = []
 
-        # 1. Seed multilingual examples per category (ensures strong Cebuano/Tagalog coverage)
+        # 1. Seed multilingual examples & full-sentence samples per category
+        _SENTENCE_SEEDS: Dict[str, List[str]] = {
+            'Road & Infrastructure': [
+                'There is a big pothole on the main road causing traffic and flat tires',
+                'The water pipe is leaking on the street and there is no water supply in our barangay',
+                'Guba kaayo ang dalan diri daghan ug lubak ug lapok kung mag ulan',
+                'Walay agas ang tubig sa among barangay sukad pa gahapon kay buslot ang tubo',
+                'Sira na ang kalsada at butas butas ang daan delikado sa mga motorista',
+                'Walang tulo ang tubig sa gripo dahil sa sirang tubo sa kanto',
+            ],
+            'Streetlights & Electricity': [
+                'The streetlight has been broken for a week and the street is very dark at night',
+                'A power pole fell and exposed live electrical wires are sparking near houses',
+                'Walay suga ang poste sa dalan ngitngit kaayo delikado mag lakaw sa gabii',
+                'Nag spark ang kable sa kuryente ug brownout sa among purok',
+                'Pundi ang ilaw sa poste at madilim ang kalsada baka may madisgrasya',
+                'Nakabiting wire ng kuryente malapit sa eskwelahan delikado sa mga bata',
+            ],
+            'Drainage & Flooding': [
+                'The drainage canal is clogged with trash causing severe flooding on our street',
+                'Heavy rain caused creek overflow and flash flood inside our neighborhood',
+                'Barado ang kanal mao nga nibaha dayon ang karsada ug nisulod sa balay',
+                'Niawas ang sapa ug delikado sa landslide diri sa among barangay',
+                'Baradong drainage kaya mabilis bumaha tuwing umuulan ng malakas',
+                'Umaapaw ang kanal at mataas na ang tubig baha sa kalsada',
+            ],
+            'Garbage & Sanitation': [
+                'Garbage has not been collected for days and the pile smells terrible',
+                'Someone is burning plastic trash creating thick foul smoke and air pollution',
+                'Wala gihakot ang basura ug baho kaayo ang tambak sa kanto',
+                'Nagdaob ug basura ang silingan baho kaayo ang aso ug abog sa hangin',
+                'Hindi kinokolekta ang basura kaya tambak na at sobrang baho sa paligid',
+                'Nagsusunog ng basura at maruming hangin ang pumapasok sa mga bahay',
+            ],
+            'Health Concerns': [
+                'There are many mosquitoes and stagnant water causing dengue cases in the area',
+                'Stray dogs bit a child and we need anti rabies vaccine at the health center',
+                'Daghan kaayo ug lamok ug naay nagkasakit ug dengue sa among barangay',
+                'Naay iro nga laag nga nakapaak ug bata kinahanglan ug bakuna sa health center',
+                'Maraming lamok at asong gala na nangangagat walang gamot sa health center',
+                'May food poisoning at maruming tubig na nagdulot ng pagtatae',
+            ],
+            'Peace, Order & Public Safety': [
+                'There is a robbery and drunk people fighting in front of our house',
+                'Suspected illegal drugs activity and snatching happening near the plaza',
+                'Naay naghubog ug nanggubot sa karsada delikado sa mga lumalabay',
+                'Naay kawatan nga nisulod sa balay ug naghulga sa mga residente',
+                'May nag aaway na lasing at magnanakaw sa barangay kailangan ng tanod',
+                'May holdap at kaguluhan sa kalye tuwing gabi',
+            ],
+            'Traffic & Transport': [
+                'Vehicles are illegally parked blocking the driveway and causing traffic congestion',
+                'A motorcycle accident happened because of reckless speeding at the intersection',
+                'Huot kaayo ang trapiko kay naay nag illegal parking ug nagbabag sa dalan',
+                'Naay aksidente sa motor kay paspas kaayo magpadagan ang driver',
+                'Nakaparada sa daan ang mga sasakyan kaya sobrang trapik sa umaga',
+                'May nabangga na tricycle dahil sa sirang traffic light',
+            ],
+            'Social Welfare & Assistance': [
+                'Senior citizen and PWD residents are asking about financial assistance and social pension',
+                'Abandoned children and street dwellers need shelter and medical assistance from CSWDO',
+                'Mga senior citizen ug pwd nangayo ug tabang pinansyal o ayuda',
+                'Naay bata nga giabandonar ug walay balay nagkinahanglan ug tabang',
+                'Humingi ng tulong pinansyal at burial assistance ang pamilyang mahirap',
+                'Senior citizen at solo parent nagtatanong tungkol sa ayuda',
+            ],
+            'Noise & Public Nuisance': [
+                'Neighbors are playing loud videoke and karaoke past midnight every night',
+                'Modified motorcycle open pipe muffler is making extreme noise at night',
+                'Saba kaayo ang videoke sa silingan hangtod tungang gabii dili mi katulog',
+                'Kusog kaayo ang tambutso sa motor ug saba ang speaker sa karsada',
+                'Sobrang ingay ng karaoke ng kapitbahay kahit hatinggabi na',
+                'Maingay na tambutso ng motor at tahol ng aso buong gabi',
+            ],
+            'Other Concerns': [
+                'General inquiry for the city mayor office regarding business permit and barangay official',
+                'Illegal vending on the sidewalk without permit near the public market',
+                'Naay pangutana ug sugyot para sa barangay kapitan ug mayor office',
+                'Illegal nga tindahan nagbabag sa agianan sa merkado',
+                'Suhestiyon sa serbisyo publiko at reklamo sa walang permit na tindahan',
+            ],
+        }
+        for cat_name, sents in _SENTENCE_SEEDS.items():
+            for s in sents:
+                corpus.append((s, cat_name))
+                corpus.append((s, cat_name))  # double weight for full-sentence multilingual seeds
         for cat_name, (_, _, kws) in NLP_CATEGORIES.items():
             # Group keywords into synthetic sentences + individual phrases
             for kw in kws:
@@ -692,35 +834,51 @@ class HybridComplaintClassifier:
                         priority_score = effective_w
                         priority = level
 
+        # 8. Joke / Spam / Nonsense Detection (run before final priority/sentiment calibration)
+        is_joke, joke_words, joke_reason = _is_joke_or_spam(text, tokens)
+
         if priority_score >= 10:
             priority = 'critical'
         elif priority_score >= 6:
             priority = 'high'
         elif priority_score >= 3:
             priority = 'medium'
-        elif len(tokens) >= 6 and best_cat != 'Other Concerns':
+        elif len(tokens) >= 6 and best_cat != 'Other Concerns' and not is_joke and len(matched_keywords) >= 1:
             priority = 'medium'
 
-        # 6. Sentiment Analysis (negation-aware + intensifier-weighted)
+        if is_joke:
+            priority = 'low'
+
+        # 6. Sentiment Analysis (multi-word phrases + negation-aware + intensifier-weighted)
         neg_score = 0.0
         pos_score = 0.0
+        for phrase in _NEGATIVE_PHRASES:
+            if phrase in text:
+                neg_score += 2.0
+        for phrase in _POSITIVE_PHRASES:
+            if phrase in text:
+                pos_score += 2.0
+
         for idx, tok in enumerate(tokens):
-            negated = _has_negation_before(tokens, idx, window=2)
+            prev_tokens = tokens[max(0, idx - 2):idx]
+            negated = any(t in _SENTIMENT_NEGATORS for t in prev_tokens)
             boost = 1.5 if (idx > 0 and tokens[idx - 1] in _INTENSIFIERS) else 1.0
             if tok in _NEGATIVE_WORDS:
-                if negated:
-                    pos_score += 0.5
-                else:
-                    neg_score += boost
+                # Only flip if a positive-meaning negation doesn't apply; complaints with 'walay/dili/hindi' stay negative
+                neg_score += boost
             elif tok in _POSITIVE_WORDS:
                 if negated:
-                    neg_score += 0.8
+                    neg_score += 1.2
                 else:
                     pos_score += boost
 
+        # Any real civic complaint with matched problem keywords is negative unless explicitly thankful/positive
+        if neg_score == 0 and pos_score == 0 and matched_keywords and best_cat != 'Other Concerns':
+            neg_score = 1.0
+
         if neg_score > pos_score:
             sentiment = 'negative'
-        elif pos_score > neg_score and priority in ('low', 'medium'):
+        elif pos_score > neg_score and priority in ('low', 'medium') and not is_joke:
             sentiment = 'positive'
         else:
             sentiment = 'neutral'
@@ -741,9 +899,6 @@ class HybridComplaintClassifier:
             confidence = min(0.98, confidence + 0.12)
 
         category_only = len(text) < 10 and category_id is not None
-
-        # 8. Joke / Spam / Nonsense Detection
-        is_joke, joke_words, joke_reason = _is_joke_or_spam(text, tokens)
 
         return {
             'category': final_cat_name,

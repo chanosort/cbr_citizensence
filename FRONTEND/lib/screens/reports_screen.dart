@@ -8,6 +8,7 @@ import '../core/theme.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/auth_layout.dart' show showCenterPromptDialog;
 import '../widgets/chips.dart';
 
 /// Reports and Analytics (admin): EP-08 GET /api/reports.
@@ -153,7 +154,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (confirmed != true || !mounted) return;
 
     final api = context.read<ApiService>();
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _exporting = true);
     try {
       final exportDays = mode == 'all' ? 0 : (mode == 'days' ? selectedDays : 0);
@@ -169,21 +169,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final fileName = 'CitizenSense_Report_${periodTag}_$scopeTag.csv';
       downloadFileFromBytes(bytes, fileName);
       if (mounted) {
-        messenger.showSnackBar(SnackBar(
-          backgroundColor: AppColors.forest,
-          content: Row(children: [
-            const Icon(Icons.download_done_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Report downloaded as "$fileName"')),
-          ]),
-        ));
+        await showCenterPromptDialog(
+          context,
+          title: 'Report Downloaded',
+          message: 'Report downloaded as "$fileName".',
+        );
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(SnackBar(
-          backgroundColor: AppColors.star,
-          content: Text('Download failed: $e'),
-        ));
+        await showCenterPromptDialog(
+          context,
+          title: 'Download Failed',
+          message: 'Download failed: $e',
+          good: false,
+        );
       }
     } finally {
       if (mounted) setState(() => _exporting = false);

@@ -1187,6 +1187,30 @@ def forgot_password(data: ForgotPasswordIn, db: Session = Depends(get_db)):
     )
     return ok({'message': 'Security answer verified. A recovery code has been sent to your registered email.', 'email': _mask_email(user.email)})
 
+@app.post('/api/auth/resend-reset-code')
+def resend_reset_code(data: ForgotQuestionsIn, db: Session = Depends(get_db)):
+    """Resend a password-reset OTP to the user's registered email without leaving the reset screen."""
+    ident = str(data.account or data.email or '').lower().strip()
+    user = db.scalar(select(User).where(
+        (func.lower(User.email) == ident) | (func.lower(User.username) == ident)
+    ))
+    if not user or not user.active:
+        raise HTTPException(404, detail={'code': 'ACCOUNT_NOT_FOUND', 'message': 'No active account found with that username or email.', 'details': {}})
+
+    code = _issue_otp(db, user.email, 'reset_password')
+    _send_email_async(
+        to=user.email,
+        subject='CBR CitizenSense – New Account Recovery Code',
+        body=(
+            f'Hi {user.name},\n\n'
+            f'Here is your new recovery code for your CitizenSense account (@{user.username or user.name}):\n\n'
+            f'Your recovery code is: {code}\n\n'
+            f'This code expires in {OTP_TTL_MINUTES} minutes.\n\n'
+            '— CBR CitizenSense Team'
+        ),
+    )
+    return ok({'message': 'A new recovery code has been sent to your registered email.', 'email': _mask_email(user.email)})
+
 # ─── Auth: Verify reset code (before typing new password) ────────────────────
 
 @app.post('/api/auth/verify-reset-code')
@@ -1283,7 +1307,11 @@ def get_avatar(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, detail={'code': 'NOT_FOUND', 'message': 'Avatar not found.'})
     path = os.path.join(avatar_dir, matches[0])
     mime, _ = mimetypes.guess_type(path)
-    return FileResponse(path, media_type=mime or 'image/png')
+    return FileResponse(
+        path,
+        media_type=mime or 'image/png',
+        headers={'Cache-Control': 'no-store, max-age=0'},
+    )
 
 @app.post('/api/auth/email-change/request')
 def request_email_change(data: EmailChangeRequestIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -2218,6 +2246,8 @@ def delete_staff_user(user_id: int, user: User = Depends(current_user), db: Sess
 @app.get('/api/admin/activity-logs')
 def get_activity_logs(
     role: Optional[str] = None,
+    actor_id: Optional[int] = None,
+    search: Optional[str] = None,
     limit: int = 200,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
@@ -2227,10 +2257,16 @@ def get_activity_logs(
     q = select(ActivityLog)
     if role and role in ('citizen', 'staff', 'admin', 'system'):
         q = q.where(ActivityLog.actor_role == role)
+    if actor_id is not None:
+        q = q.where(ActivityLog.actor_id == actor_id)
+    if search and search.strip():
+        pat = f'%{search.strip()}%'
+        q = q.where((ActivityLog.actor_name.ilike(pat)) | (ActivityLog.summary.ilike(pat)))
     rows = list(db.scalars(q.order_by(ActivityLog.created_at.desc()).limit(min(limit, 500))))
     return ok({'items': [
         {
             'id': r.id,
+            'actor_id': r.actor_id,
             'actor_name': r.actor_name,
             'actor_role': r.actor_role,
             'action': r.action,
@@ -2260,13 +2296,10 @@ def admin_offices(user: User = Depends(current_user), db: Session = Depends(get_
 
 @app.get('/api/notifications')
 def notifications(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Return all notifications for the current user within today (UTC+8), newest first."""
-    ph_tz = timezone(timedelta(hours=8))
-    now_ph = datetime.now(ph_tz)
-    start_of_today_utc = now_ph.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+    """Return persistent notifications for the current user, newest first."""
     rows = list(db.scalars(
         select(Notification)
-        .where(Notification.user_id == user.id, Notification.created_at >= start_of_today_utc)
+        .where(Notification.user_id == user.id)
         .order_by(Notification.created_at.desc())
         .limit(100)
     ))

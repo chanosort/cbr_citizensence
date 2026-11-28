@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/auth_layout.dart' show showCenterPromptDialog;
 
 /// Admin: manage user accounts and see office workload.
 class UsersOfficesScreen extends StatelessWidget {
@@ -81,13 +82,25 @@ class _UsersTabState extends State<_UsersTab> with AutomaticKeepAliveClientMixin
 
   Future<void> _toggle(UserRecord u, bool active) async {
     final api = context.read<ApiService>();
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await api.setUserActive(u.id, active);
-      messenger.showSnackBar(SnackBar(content: Text('${u.name} ${active ? 'activated' : 'deactivated'}.')));
       _load();
+      if (mounted) {
+        await showCenterPromptDialog(
+          context,
+          title: active ? 'User Activated' : 'User Deactivated',
+          message: '${u.name} has been ${active ? 'activated' : 'deactivated'}.',
+        );
+      }
     } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        await showCenterPromptDialog(
+          context,
+          title: 'Update Failed',
+          message: e.message,
+          good: false,
+        );
+      }
     }
   }
 

@@ -11,7 +11,7 @@ import '../providers/theme_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/announcement_slideshow.dart';
 import '../widgets/app_shell.dart';
-import '../widgets/auth_layout.dart' show MessageBanner;
+import '../widgets/auth_layout.dart' show MessageBanner, showCenterPromptDialog;
 import '../widgets/terms_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -78,28 +78,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _uploadProfilePhoto() async {
     final api = context.read<ApiService>();
     final auth = context.read<AuthProvider>();
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final res = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['jpg', 'jpeg', 'png'],
+        type: FileType.image,
         withData: true,
       );
       if (res == null || res.files.isEmpty) return;
       final f = res.files.single;
       final bytes = f.bytes;
-      if (bytes == null) return;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          await showCenterPromptDialog(
+            context,
+            title: 'Upload Failed',
+            message: 'Could not read the selected image file. Please try another photo.',
+            good: false,
+          );
+        }
+        return;
+      }
       final updated = await api.uploadAvatar(bytes, f.name);
       await auth.updateUser(updated);
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(
-        backgroundColor: AppColors.forest,
-        content: Text('Profile photo updated!'),
-      ));
+      await showCenterPromptDialog(
+        context,
+        title: 'Photo Updated',
+        message: 'Your profile photo has been uploaded and saved.',
+      );
     } on ApiException catch (e) {
-      if (mounted) messenger.showSnackBar(SnackBar(content: Text(e.displayMessage)));
+      if (mounted) {
+        await showCenterPromptDialog(
+          context,
+          title: 'Upload Failed',
+          message: e.displayMessage,
+          good: false,
+        );
+      }
     } catch (_) {
-      if (mounted) messenger.showSnackBar(const SnackBar(content: Text('Could not upload profile photo.')));
+      if (mounted) {
+        await showCenterPromptDialog(
+          context,
+          title: 'Upload Failed',
+          message: 'Could not upload profile photo. Please try again.',
+          good: false,
+        );
+      }
     }
   }
 
@@ -147,8 +170,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // ── Profile Summary Card ──────────────────────────────
                 _card(
                   context,
-                  Row(children: [
-                    CircleAvatar(
+                  LayoutBuilder(builder: (context, box) {
+                    final narrow = box.maxWidth < 460;
+                    final avatar = CircleAvatar(
                       radius: 30,
                       backgroundColor: AppColors.navy,
                       backgroundImage: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
@@ -158,27 +182,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? Text(user.initials,
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20))
                           : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(user.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                        Text(user.email, style: const TextStyle(color: AppColors.muted)),
-                        const SizedBox(height: 6),
-                        Text(
-                          isStaff && user.officeId != null
-                              ? '${user.role.label} · ${officeById(user.officeId!).name}'
-                              : user.role.label,
-                          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.seal, fontSize: 13),
-                        ),
-                      ]),
-                    ),
-                    OutlinedButton.icon(
+                    );
+                    final info = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(user.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      Text(user.email, style: const TextStyle(color: AppColors.muted), overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 6),
+                      Text(
+                        isStaff && user.officeId != null
+                            ? '${user.role.label} · ${officeById(user.officeId!).name}'
+                            : user.role.label,
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.seal, fontSize: 13),
+                      ),
+                    ]);
+                    final btn = OutlinedButton.icon(
                       onPressed: _uploadProfilePhoto,
                       icon: const Icon(Icons.camera_alt_outlined, size: 16),
-                      label: Text(user.role == UserRole.citizen ? 'Photo' : 'Logo / Photo'),
-                    ),
-                  ]),
+                      label: Text(user.role == UserRole.citizen ? 'Change Photo' : 'Logo / Photo'),
+                    );
+                    if (narrow) {
+                      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        Row(children: [avatar, const SizedBox(width: 14), Expanded(child: info)]),
+                        const SizedBox(height: 12),
+                        btn,
+                      ]);
+                    }
+                    return Row(children: [
+                      avatar,
+                      const SizedBox(width: 16),
+                      Expanded(child: info),
+                      btn,
+                    ]);
+                  }),
                 ),
                 const SizedBox(height: 18),
 
@@ -437,60 +471,71 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: const Row(children: [
         Icon(Icons.lock_reset_rounded, color: AppColors.navy),
         SizedBox(width: 8),
-        Text('Change Password', style: TextStyle(fontWeight: FontWeight.w800)),
+        Expanded(child: Text('Change Password', style: TextStyle(fontWeight: FontWeight.w800))),
       ]),
-      content: SizedBox(
-        width: 400,
-        child: Form(
-          key: _form,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_error != null) ...[MessageBanner(message: _error!), const SizedBox(height: 12)],
-              if (_ok != null) ...[MessageBanner(message: _ok!, good: true), const SizedBox(height: 12)],
-              TextFormField(
-                controller: _current,
-                obscureText: _obscure,
-                decoration: const InputDecoration(labelText: 'Current password'),
-                validator: (v) => (v ?? '').isEmpty ? 'Enter your current password.' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _new,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: 'New password',
-                  helperText: kPasswordRuleHint,
-                  helperMaxLines: 2,
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_error != null) ...[MessageBanner(message: _error!), const SizedBox(height: 12)],
+                if (_ok != null) ...[MessageBanner(message: _ok!, good: true), const SizedBox(height: 12)],
+                TextFormField(
+                  controller: _current,
+                  obscureText: _obscure,
+                  decoration: const InputDecoration(labelText: 'Current password'),
+                  validator: (v) => (v ?? '').isEmpty ? 'Enter your current password.' : null,
                 ),
-                validator: (v) => validatePassword(v, strict: true),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _confirm,
-                obscureText: _obscure,
-                decoration: const InputDecoration(labelText: 'Confirm new password'),
-                validator: (v) => v != _new.text ? 'Passwords do not match.' : null,
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _new,
+                  obscureText: _obscure,
+                  decoration: InputDecoration(
+                    labelText: 'New password',
+                    helperText: kPasswordRuleHint,
+                    helperMaxLines: 3,
+                    errorMaxLines: 3,
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                  validator: (v) => validatePassword(v, strict: true),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _confirm,
+                  obscureText: _obscure,
+                  decoration: const InputDecoration(labelText: 'Confirm new password', errorMaxLines: 2),
+                  validator: (v) => v != _new.text ? 'Passwords do not match.' : null,
+                ),
+              ],
+            ),
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ElevatedButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('Update Password'),
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ElevatedButton(
+              onPressed: _saving ? null : _submit,
+              child: _saving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Update Password'),
+            ),
+          ],
         ),
       ],
     );
@@ -911,124 +956,144 @@ class _AnnouncementsManagerDialogState extends State<_AnnouncementsManagerDialog
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Row(children: [
-        const Icon(Icons.campaign_rounded, color: AppColors.seal),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            widget.isAdmin ? 'Announcements & Requests' : 'Announcement Requests',
-            style: const TextStyle(fontWeight: FontWeight.w800),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            const Icon(Icons.campaign_rounded, color: AppColors.seal),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.isAdmin ? 'Announcements & Requests' : 'Announcement Requests',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(minimumSize: const Size(0, 38), padding: const EdgeInsets.symmetric(horizontal: 14)),
+              onPressed: _openCreateForm,
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: Text(widget.isAdmin ? 'New Announcement' : 'Request Form'),
+            ),
           ),
-        ),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(minimumSize: const Size(0, 38), padding: const EdgeInsets.symmetric(horizontal: 12)),
-          onPressed: _openCreateForm,
-          icon: const Icon(Icons.add_rounded, size: 16),
-          label: Text(widget.isAdmin ? 'New Announcement' : 'Request Form'),
-        ),
-      ]),
-      content: SizedBox(
-        width: 600,
-        height: 430,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(child: Text(_error!))
-                : _items.isEmpty
-                    ? const Center(child: Text('No announcements yet.'))
-                    : ListView.separated(
-                        itemCount: _items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 14),
-                        itemBuilder: (context, i) {
-                          final a = _items[i];
-                          final statusColor = a.status == 'approved'
-                              ? AppColors.forest
-                              : a.status == 'pending'
-                                  ? Colors.orange
-                                  : AppColors.star;
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Row(children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  a.status.toUpperCase(),
-                                  style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w800),
-                                ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 430),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(child: Text(_error!))
+                  : _items.isEmpty
+                      ? const Center(child: Text('No announcements yet.'))
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _items.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, i) {
+                            final a = _items[i];
+                            final statusColor = a.status == 'approved'
+                                ? AppColors.forest
+                                : a.status == 'pending'
+                                    ? Colors.orange
+                                    : AppColors.star;
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.panel,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.line),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(a.title, style: const TextStyle(fontWeight: FontWeight.w700))),
-                            ]),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 4),
-                                Text(a.content, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                const SizedBox(height: 4),
-                                Text('${a.category} · By ${a.createdByName} (${a.createdByRole})',
-                                    style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
-                              ],
-                            ),
-                            trailing: widget.isAdmin
-                                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                                    if (a.status == 'pending') ...[
-                                      IconButton(
-                                        tooltip: 'Approve & Publish',
-                                        icon: const Icon(Icons.check_circle_rounded, color: AppColors.forest),
-                                        onPressed: () async {
-                                          await context.read<ApiService>().updateAnnouncement(id: a.id, status: 'approved', isActive: true);
-                                          _load();
-                                        },
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: statusColor.withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
-                                      IconButton(
-                                        tooltip: 'Reject',
-                                        icon: const Icon(Icons.cancel_rounded, color: AppColors.star),
-                                        onPressed: () async {
-                                          await context.read<ApiService>().updateAnnouncement(id: a.id, status: 'rejected', isActive: false);
-                                          _load();
-                                        },
+                                      child: Text(
+                                        a.status.toUpperCase(),
+                                        style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w800),
                                       ),
-                                    ] else
-                                      IconButton(
-                                        tooltip: a.isActive ? 'Hide from Login' : 'Show on Login',
-                                        icon: Icon(a.isActive ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                                            color: a.isActive ? AppColors.navy : AppColors.muted),
-                                        onPressed: () async {
-                                          await context.read<ApiService>().updateAnnouncement(id: a.id, isActive: !a.isActive);
-                                          _load();
-                                        },
-                                      ),
-                                    IconButton(
-                                      tooltip: 'Edit announcement',
-                                      icon: const Icon(Icons.edit_rounded, color: AppColors.navy),
-                                      onPressed: () => _openCreateForm(existing: a),
                                     ),
-                                    IconButton(
-                                      tooltip: 'Delete',
-                                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.star),
-                                      onPressed: () async {
-                                        await context.read<ApiService>().deleteAnnouncement(a.id);
-                                        _load();
-                                      },
-                                    ),
-                                  ])
-                                : (a.status == 'pending'
-                                    ? IconButton(
-                                        tooltip: 'Cancel request',
-                                        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.star),
-                                        onPressed: () async {
-                                          await context.read<ApiService>().deleteAnnouncement(a.id);
-                                          _load();
-                                        },
-                                      )
-                                    : null),
-                          );
-                        },
-                      ),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(a.title, style: const TextStyle(fontWeight: FontWeight.w700))),
+                                  ]),
+                                  const SizedBox(height: 6),
+                                  Text(a.content, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                                  const SizedBox(height: 6),
+                                  Text('${a.category} · By ${a.createdByName} (${a.createdByRole})',
+                                      style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
+                                  if (widget.isAdmin || a.status == 'pending') ...[
+                                    const SizedBox(height: 6),
+                                    Wrap(spacing: 4, runSpacing: 4, children: [
+                                      if (widget.isAdmin) ...[
+                                        if (a.status == 'pending') ...[
+                                          IconButton(
+                                            tooltip: 'Approve & Publish',
+                                            icon: const Icon(Icons.check_circle_rounded, color: AppColors.forest),
+                                            onPressed: () async {
+                                              await context.read<ApiService>().updateAnnouncement(id: a.id, status: 'approved', isActive: true);
+                                              _load();
+                                            },
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Reject',
+                                            icon: const Icon(Icons.cancel_rounded, color: AppColors.star),
+                                            onPressed: () async {
+                                              await context.read<ApiService>().updateAnnouncement(id: a.id, status: 'rejected', isActive: false);
+                                              _load();
+                                            },
+                                          ),
+                                        ] else
+                                          IconButton(
+                                            tooltip: a.isActive ? 'Hide from Login' : 'Show on Login',
+                                            icon: Icon(a.isActive ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                                                color: a.isActive ? AppColors.navy : AppColors.muted),
+                                            onPressed: () async {
+                                              await context.read<ApiService>().updateAnnouncement(id: a.id, isActive: !a.isActive);
+                                              _load();
+                                            },
+                                          ),
+                                        IconButton(
+                                          tooltip: 'Edit announcement',
+                                          icon: const Icon(Icons.edit_rounded, color: AppColors.navy),
+                                          onPressed: () => _openCreateForm(existing: a),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Delete',
+                                          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.star),
+                                          onPressed: () async {
+                                            await context.read<ApiService>().deleteAnnouncement(a.id);
+                                            _load();
+                                          },
+                                        ),
+                                      ] else if (a.status == 'pending')
+                                        IconButton(
+                                          tooltip: 'Cancel request',
+                                          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.star),
+                                          onPressed: () async {
+                                            await context.read<ApiService>().deleteAnnouncement(a.id);
+                                            _load();
+                                          },
+                                        ),
+                                    ]),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
@@ -1118,9 +1183,12 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
       );
       await auth.updateUser(updated);
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: AppColors.forest, content: Text('Email updated successfully!')),
+      final rootNav = Navigator.of(context);
+      rootNav.pop();
+      await showCenterPromptDialog(
+        rootNav.context,
+        title: 'Email Updated',
+        message: 'Your email address has been updated to ${_emailCtrl.text.trim()}.',
       );
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -1141,49 +1209,61 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: const Row(children: [
         Icon(Icons.mark_email_read_outlined, color: Colors.indigo),
         SizedBox(width: 8),
-        Text('Update Email Address', style: TextStyle(fontWeight: FontWeight.w800)),
+        Expanded(child: Text('Update Email Address', style: TextStyle(fontWeight: FontWeight.w800))),
       ]),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_error != null) ...[MessageBanner(message: _error!), const SizedBox(height: 10)],
-            if (_ok != null) ...[MessageBanner(message: _ok!, good: true), const SizedBox(height: 10)],
-            TextField(
-              controller: _passCtrl,
-              obscureText: true,
-              enabled: !_codeSent,
-              decoration: const InputDecoration(labelText: 'Current password'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailCtrl,
-              enabled: !_codeSent,
-              decoration: const InputDecoration(labelText: 'New email address'),
-            ),
-            if (_codeSent) ...[
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null) ...[MessageBanner(message: _error!), const SizedBox(height: 10)],
+              if (_ok != null) ...[MessageBanner(message: _ok!, good: true), const SizedBox(height: 10)],
+              TextField(
+                controller: _passCtrl,
+                obscureText: true,
+                enabled: !_codeSent,
+                decoration: const InputDecoration(labelText: 'Current password'),
+              ),
               const SizedBox(height: 12),
               TextField(
-                controller: _codeCtrl,
-                maxLength: 6,
-                decoration: const InputDecoration(labelText: '6-digit verification code'),
+                controller: _emailCtrl,
+                enabled: !_codeSent,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'New email address'),
               ),
+              if (_codeSent) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _codeCtrl,
+                  maxLength: 6,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '6-digit verification code'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ElevatedButton(
-          onPressed: _busy ? null : (_codeSent ? _confirmCode : _sendCode),
-          child: _busy
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(_codeSent ? 'Verify & Update Email' : 'Send Verification Code'),
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ElevatedButton(
+              onPressed: _busy ? null : (_codeSent ? _confirmCode : _sendCode),
+              child: _busy
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(_codeSent ? 'Verify & Update' : 'Send Code'),
+            ),
+          ],
         ),
       ],
     );
@@ -1202,19 +1282,40 @@ class _ActivityLogsDialog extends StatefulWidget {
 
 class _ActivityLogsDialogState extends State<_ActivityLogsDialog> {
   List<ActivityLogItem> _logs = const [];
+  List<UserRecord> _users = const [];
   String? _roleFilter;
+  int? _actorIdFilter;
+  final _searchCtrl = TextEditingController();
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _loadUsers();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
+    try {
+      final u = await context.read<ApiService>().adminUsers();
+      if (mounted) setState(() => _users = u);
+    } catch (_) {}
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final list = await context.read<ApiService>().adminActivityLogs(role: _roleFilter);
+      final list = await context.read<ApiService>().adminActivityLogs(
+            role: _roleFilter,
+            actorId: _actorIdFilter,
+            search: _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim(),
+          );
       if (mounted) {
         setState(() {
           _logs = list;
@@ -1230,35 +1331,75 @@ class _ActivityLogsDialogState extends State<_ActivityLogsDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       title: const Row(children: [
         Icon(Icons.history_rounded, color: Colors.deepPurple),
         SizedBox(width: 8),
-        Text('System Activity Logs', style: TextStyle(fontWeight: FontWeight.w800)),
+        Expanded(child: Text('System Activity Logs', style: TextStyle(fontWeight: FontWeight.w800))),
       ]),
-      content: SizedBox(
-        width: 620,
-        height: 440,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(spacing: 8, children: [
-              for (final entry in <String?, String>{null: 'All', 'citizen': 'Citizens', 'staff': 'Staff', 'admin': 'Admins'}.entries)
-                ChoiceChip(
-                  label: Text(entry.value),
-                  selected: _roleFilter == entry.key,
-                  onSelected: (_) {
-                    _roleFilter = entry.key;
-                    _load();
-                  },
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 480),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(spacing: 8, runSpacing: 6, children: [
+                for (final entry in <String?, String>{null: 'All', 'citizen': 'Citizens', 'staff': 'Staff', 'admin': 'Admins'}.entries)
+                  ChoiceChip(
+                    label: Text(entry.value),
+                    selected: _roleFilter == entry.key,
+                    onSelected: (_) {
+                      _roleFilter = entry.key;
+                      _load();
+                    },
+                  ),
+              ]),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<int?>(
+                initialValue: _actorIdFilter,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Filter by specific user',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.person_search_rounded, size: 18),
                 ),
-            ]),
-            const SizedBox(height: 12),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _logs.isEmpty
-                      ? const Center(child: Text('No activity logs recorded yet.', style: TextStyle(color: AppColors.muted)))
-                      : ListView.separated(
+                items: [
+                  const DropdownMenuItem<int?>(value: null, child: Text('All users')),
+                  for (final u in _users)
+                    DropdownMenuItem<int?>(
+                      value: u.id,
+                      child: Text('${u.name} (${u.role.label})', overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) {
+                  _actorIdFilter = v;
+                  _load();
+                },
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _searchCtrl,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _load(),
+                decoration: InputDecoration(
+                  hintText: 'Search user name or activity...',
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  suffixIcon: IconButton(
+                    tooltip: 'Search',
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                    onPressed: _load,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _logs.isEmpty
+                        ? const Center(child: Text('No activity logs matching this filter.', style: TextStyle(color: AppColors.muted)))
+                        : ListView.separated(
                           itemCount: _logs.length,
                           separatorBuilder: (_, __) => const Divider(height: 12),
                           itemBuilder: (_, i) {
@@ -1282,6 +1423,7 @@ class _ActivityLogsDialogState extends State<_ActivityLogsDialog> {
                         ),
             ),
           ],
+        ),
         ),
       ),
       actions: [

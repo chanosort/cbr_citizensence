@@ -316,6 +316,7 @@ class ComplaintMessage {
 
 class ActivityLogItem {
   final int id;
+  final int? actorId;
   final String actorName;
   final String actorRole;
   final String action;
@@ -326,6 +327,7 @@ class ActivityLogItem {
 
   const ActivityLogItem({
     required this.id,
+    this.actorId,
     required this.actorName,
     required this.actorRole,
     required this.action,
@@ -337,6 +339,7 @@ class ActivityLogItem {
 
   factory ActivityLogItem.fromJson(Map<String, dynamic> j) => ActivityLogItem(
         id: (j['id'] as num?)?.toInt() ?? 0,
+        actorId: (j['actor_id'] as num?)?.toInt(),
         actorName: (j['actor_name'] as String?) ?? 'System',
         actorRole: (j['actor_role'] as String?) ?? 'system',
         action: (j['action'] as String?) ?? '',

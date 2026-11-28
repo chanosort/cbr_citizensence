@@ -277,26 +277,75 @@ class _SubmitComplaintScreenState extends State<SubmitComplaintScreen> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(children: [
-          const Icon(Icons.check_circle_rounded, color: AppColors.forest, size: 28),
-          const SizedBox(width: 10),
-          Expanded(child: Text('Complaint #${c.id} submitted', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18))),
-        ]),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _kv('Priority', PriorityChip(c.priority)),
-          _kv('Sent to', Text(officeById(c.officeId).name, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
-          _kv('Status', StatusChip(c.status)),
-          if (c.priority == Priority.critical) ...[
-            const SizedBox(height: 8),
-            const Text('This looks like an emergency. Please also call 911.',
-                style: TextStyle(color: AppColors.star, fontWeight: FontWeight.w700)),
-          ],
-        ]),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: AppColors.forest.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check_circle_rounded, color: AppColors.forest, size: 44),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Complaint Submitted!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: AppColors.ink),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Reference #${c.id}',
+                  style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w700, fontSize: 13.5),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.panel,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _kv('Category', Text(categoryById(c.categoryId).name, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
+                      _kv('Priority', PriorityChip(c.priority)),
+                      _kv('Sent to', Text(officeById(c.officeId).name, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
+                      _kv('Status', StatusChip(c.status)),
+                    ],
+                  ),
+                ),
+                if (c.priority == Priority.critical) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'This looks like an emergency. Please also call 911.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.star, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
         actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Back to dashboard')),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Back to dashboard'),
+            ),
           ),
         ],
       ),
