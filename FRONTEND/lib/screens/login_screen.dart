@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
             obscureText: _obscure,
             autofillHints: const [AutofillHints.password],
             textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => auth.busy ? null : _submit(),
+            onFieldSubmitted: (_) => (auth.busy || auth.loginCooldownSeconds > 0) ? null : _submit(),
             decoration: InputDecoration(
               labelText: 'Password',
               suffixIcon: IconButton(
@@ -111,12 +111,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: auth.busy ? null : _submit,
+            onPressed: (auth.busy || auth.loginCooldownSeconds > 0) ? null : _submit,
             child: auth.busy
                 ? const SizedBox(
                     width: 22, height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : const Text('Log in'),
+                : Text(auth.loginCooldownSeconds > 0
+                    ? 'Locked (${auth.loginCooldownSeconds}s)'
+                    : 'Log in'),
           ),
           const SizedBox(height: 8),
           Align(

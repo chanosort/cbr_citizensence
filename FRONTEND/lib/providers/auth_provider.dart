@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,33 @@ class AuthProvider extends ChangeNotifier {
   bool busy = false;
   String? error;
   String? sessionNotice;
+  int loginCooldownSeconds = 0;
+  Timer? _cooldownTimer;
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startLoginCooldown(int seconds, {bool ipBlocked = false}) {
+    _cooldownTimer?.cancel();
+    loginCooldownSeconds = seconds;
+    if (seconds <= 0) return;
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (loginCooldownSeconds <= 1) {
+        t.cancel();
+        loginCooldownSeconds = 0;
+        error = null;
+      } else {
+        loginCooldownSeconds--;
+        error = ipBlocked
+            ? 'Too many failed login attempts from this IP. Please wait ${loginCooldownSeconds}s.'
+            : 'Account locked due to too many failed login attempts. Please wait ${loginCooldownSeconds}s before trying again.';
+      }
+      notifyListeners();
+    });
+  }
 
   /// Real-API mode only: bring back the saved session after a page refresh.
   Future<void> restore() async {
@@ -76,12 +104,15 @@ class AuthProvider extends ChangeNotifier {
   // ── Login ────────────────────────────────────────────────────────────────
 
   Future<bool> login(String email, String password) async {
+    if (loginCooldownSeconds > 0) return false;
     busy = true;
     error = null;
     sessionNotice = null;
     notifyListeners();
     try {
       final s = await _api.login(email: email.trim(), password: password);
+      _cooldownTimer?.cancel();
+      loginCooldownSeconds = 0;
       _api.setToken(s.token);
       await _save(s.token, s.user);
       user = s.user;
@@ -89,7 +120,16 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } on ApiException catch (e) {
-      error = e.displayMessage;
+      if (e.code == 'ACCOUNT_LOCKED' || e.code == 'IP_BLOCKED') {
+        final rawRetry = e.details['retry_after'];
+        final secs = rawRetry is int
+            ? rawRetry
+            : int.tryParse('${rawRetry ?? ''}') ?? (e.code == 'IP_BLOCKED' ? 600 : 15);
+        error = e.message;
+        _startLoginCooldown(secs, ipBlocked: e.code == 'IP_BLOCKED');
+      } else {
+        error = e.displayMessage;
+      }
     } catch (_) {
       error = 'Something went wrong. Please try again.';
     }
