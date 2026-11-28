@@ -22,10 +22,27 @@ String? validateRegisterEmail(String? v) {
   return null;
 }
 
+const String kPasswordRuleHint =
+    'Min 8 chars: capital & small letter, number, and special character.';
+
 String? validatePassword(String? v, {bool strict = false}) {
   final p = v ?? '';
   if (p.isEmpty) return 'Enter your password.';
-  if (strict && p.length < 8) return 'Password must be at least 8 characters long.';
+  if (strict) {
+    if (p.length < 8) return 'Password must be at least 8 characters long.';
+    if (!RegExp(r'[A-Z]').hasMatch(p)) {
+      return 'Password must contain at least one capital letter (A-Z).';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(p)) {
+      return 'Password must contain at least one small letter (a-z).';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(p)) {
+      return 'Password must contain at least one number (0-9).';
+    }
+    if (!RegExp(r'[^a-zA-Z0-9\s]').hasMatch(p)) {
+      return 'Password must contain at least one special character (e.g. !@#\$%^&*).';
+    }
+  }
   return null;
 }
 

@@ -67,12 +67,16 @@ class AuthProvider extends ChangeNotifier {
 
   // ── Login ────────────────────────────────────────────────────────────────
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String email, String password, {String? recaptchaToken}) async {
     busy = true;
     error = null;
     notifyListeners();
     try {
-      final s = await _api.login(email: email.trim(), password: password);
+      final s = await _api.login(
+        email: email.trim(),
+        password: password,
+        recaptchaToken: recaptchaToken,
+      );
       _api.setToken(s.token);
       await _save(s.token, s.user);
       user = s.user;
@@ -97,6 +101,7 @@ class AuthProvider extends ChangeNotifier {
     required String username,
     required String email,
     required String password,
+    String? recaptchaToken,
   }) async {
     busy = true;
     error = null;
@@ -107,6 +112,7 @@ class AuthProvider extends ChangeNotifier {
         username: username.trim(),
         email: email.trim(),
         password: password,
+        recaptchaToken: recaptchaToken,
       );
       busy = false;
       notifyListeners();

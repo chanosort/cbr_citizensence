@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,7 @@ import '../core/theme.dart';
 import '../core/validators.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_layout.dart';
+import '../widgets/recaptcha_box.dart';
 import '../widgets/terms_dialog.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -27,6 +29,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscure = true;
   bool _agreed = false;
   bool _termsError = false;
+  String? _recaptchaToken;
+  bool _captchaError = false;
+  int _captchaReset = 0;
 
   @override
   void initState() {
@@ -61,7 +66,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _submit() async {
     final valid = _form.currentState!.validate();
     if (!_agreed) setState(() => _termsError = true);
-    if (!valid || !_agreed) return;
+    final missingCaptcha = kIsWeb && (_recaptchaToken == null || _recaptchaToken!.isEmpty);
+    setState(() => _captchaError = missingCaptcha);
+    if (!valid || !_agreed || missingCaptcha) return;
 
     final auth = context.read<AuthProvider>();
     final email = _email.text.trim();
@@ -71,11 +78,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       username: _username.text,
       email: email,
       password: _password.text,
+      recaptchaToken: _recaptchaToken,
     );
 
     if (success && mounted) {
       // Navigate to the OTP verification screen, passing the email
       context.go('/verify-email?email=${Uri.encodeComponent(email)}');
+    } else if (!success && mounted && kIsWeb) {
+      setState(() {
+        _recaptchaToken = null;
+        _captchaReset++;
+      });
     }
   }
 
@@ -138,7 +151,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             textInputAction: TextInputAction.next,
             decoration: InputDecoration(
               labelText: 'Password',
-              helperText: 'At least 8 characters.',
+              helperText: kPasswordRuleHint,
+              helperMaxLines: 2,
               suffixIcon: IconButton(
                 tooltip: _obscure ? 'Show password' : 'Hide password',
                 icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -188,6 +202,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Text('You need to agree before creating an account.',
                   style: TextStyle(color: AppColors.star, fontSize: 12.5)),
             ),
+          if (kIsWeb) ...[
+            const SizedBox(height: 12),
+            RecaptchaBox(
+              resetTrigger: _captchaReset,
+              onChanged: (token) => setState(() {
+                _recaptchaToken = token;
+                if (token != null) _captchaError = false;
+              }),
+            ),
+            if (_captchaError)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Please complete the reCAPTCHA verification.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.star, fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
           const SizedBox(height: 14),
           ElevatedButton(
             onPressed: auth.busy ? null : _submit,

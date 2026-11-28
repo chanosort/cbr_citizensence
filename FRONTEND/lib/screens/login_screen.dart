@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +8,7 @@ import '../core/validators.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/announcement_slideshow.dart';
 import '../widgets/auth_layout.dart';
+import '../widgets/recaptcha_box.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.justRegistered = false, this.justVerified = false, this.justReset = false});
@@ -23,6 +25,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
+  String? _recaptchaToken;
+  bool _captchaError = false;
+  int _captchaReset = 0;
 
   @override
   void initState() {
@@ -42,8 +47,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
+    if (kIsWeb && (_recaptchaToken == null || _recaptchaToken!.isEmpty)) {
+      setState(() => _captchaError = true);
+      return;
+    }
+    setState(() => _captchaError = false);
     // On success the router redirects to the dashboard for the detected role.
-    await context.read<AuthProvider>().login(_email.text, _password.text);
+    final ok = await context.read<AuthProvider>().login(
+          _email.text,
+          _password.text,
+          recaptchaToken: _recaptchaToken,
+        );
+    if (!ok && mounted && kIsWeb) {
+      setState(() {
+        _recaptchaToken = null;
+        _captchaReset++;
+      });
+    }
   }
 
   @override
@@ -105,6 +125,25 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             validator: validatePassword,
           ),
+          if (kIsWeb) ...[
+            const SizedBox(height: 16),
+            RecaptchaBox(
+              resetTrigger: _captchaReset,
+              onChanged: (token) => setState(() {
+                _recaptchaToken = token;
+                if (token != null) _captchaError = false;
+              }),
+            ),
+            if (_captchaError)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Please complete the reCAPTCHA verification.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.star, fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: auth.busy ? null : _submit,

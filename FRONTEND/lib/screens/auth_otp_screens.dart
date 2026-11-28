@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
+import '../core/validators.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/auth_layout.dart';
@@ -286,7 +287,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       await _verifyCode();
       return;
     }
-    if (_newPassword.text.length < 8) return;
+    final passErr = validatePassword(_newPassword.text, strict: true);
+    if (passErr != null) {
+      setState(() => _codeError = passErr);
+      return;
+    }
     if (_newPassword.text != _confirm.text) return;
     setState(() => _codeError = null);
 
@@ -356,7 +361,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             textInputAction: TextInputAction.next,
             decoration: InputDecoration(
               labelText: 'New password',
-              helperText: 'At least 8 characters.',
+              helperText: kPasswordRuleHint,
+              helperMaxLines: 2,
+              errorText: _newPassword.text.isNotEmpty ? validatePassword(_newPassword.text, strict: true) : _codeError,
               suffixIcon: IconButton(
                 tooltip: _obscure ? 'Show password' : 'Hide password',
                 icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),

@@ -8,13 +8,13 @@ class SealLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget img = Image.asset(
-      'assets/images/cabadbaran_seal.png',
+      'assets/images/app_logo.png',
       width: size,
       height: size,
       fit: BoxFit.contain,
-      semanticLabel: 'City of Cabadbaran official seal',
+      semanticLabel: 'Cabadbaran CitizenSense logo',
       errorBuilder: (context, error, stackTrace) => Image.asset(
-        'assets/images/cabadbaran_seal.jpg',
+        'assets/images/cabadbaran_seal.png',
         width: size,
         height: size,
         fit: BoxFit.contain,

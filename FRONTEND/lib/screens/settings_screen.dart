@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants.dart';
 import '../core/theme.dart';
+import '../core/validators.dart';
 import '../models/models.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
@@ -463,13 +464,14 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   labelText: 'New password',
-                  helperText: 'At least 8 characters.',
+                  helperText: kPasswordRuleHint,
+                  helperMaxLines: 2,
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
-                validator: (v) => (v ?? '').length < 8 ? 'At least 8 characters required.' : null,
+                validator: (v) => validatePassword(v, strict: true),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -594,14 +596,13 @@ class _StaffCrudDialogState extends State<_StaffCrudDialog> {
                     obscureText: true,
                     decoration: InputDecoration(
                       labelText: existing == null ? 'Password' : 'New Password (optional)',
-                      helperText: 'At least 8 characters',
+                      helperText: kPasswordRuleHint,
+                      helperMaxLines: 2,
                     ),
                     validator: (v) {
                       final val = v ?? '';
-                      if (existing == null && val.length < 8) return 'At least 8 characters required.';
-                      if (existing != null && val.isNotEmpty && val.length < 8) {
-                        return 'At least 8 characters required.';
-                      }
+                      if (existing == null) return validatePassword(val, strict: true);
+                      if (val.isNotEmpty) return validatePassword(val, strict: true);
                       return null;
                     },
                   ),
