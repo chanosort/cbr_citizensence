@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../core/constants.dart';
@@ -27,7 +26,7 @@ class ApiException implements Exception {
 abstract class ApiService {
   void setToken(String? token);
 
-  Future<AuthSession> login({required String email, required String password, String? recaptchaToken});
+  Future<AuthSession> login({required String email, required String password});
 
   /// Self-registration always creates a 'citizen'. An OTP is sent to the email.
   Future<void> register({
@@ -35,7 +34,6 @@ abstract class ApiService {
     required String username,
     required String email,
     required String password,
-    String? recaptchaToken,
   });
 
   /// Verify the email OTP sent after registration.
@@ -208,14 +206,8 @@ class HttpApiService implements ApiService {
       ((d['items'] as List?) ?? const []).map((e) => (e as Map).cast<String, dynamic>()).toList();
 
   @override
-  Future<AuthSession> login({required String email, required String password, String? recaptchaToken}) async {
-    final d = await _post('/api/auth/login', {
-      'account': email,
-      'email': email,
-      'password': password,
-      if (recaptchaToken != null) 'recaptcha_token': recaptchaToken,
-      'platform': kIsWeb ? 'web' : 'mobile',
-    });
+  Future<AuthSession> login({required String email, required String password}) async {
+    final d = await _post('/api/auth/login', {'account': email, 'email': email, 'password': password});
     return AuthSession(
       AppUser.fromJson((d['user'] as Map).cast<String, dynamic>()),
       d['token'] as String,
@@ -228,15 +220,12 @@ class HttpApiService implements ApiService {
     required String username,
     required String email,
     required String password,
-    String? recaptchaToken,
   }) async {
     await _post('/api/auth/register', {
       'name': name,
       'username': username,
       'email': email,
       'password': password,
-      if (recaptchaToken != null) 'recaptcha_token': recaptchaToken,
-      'platform': kIsWeb ? 'web' : 'mobile',
     });
   }
 
@@ -767,7 +756,7 @@ class MockApiService implements ApiService {
   String getAvatarUrl(String? avatarUrl) => '';
 
   @override
-  Future<AuthSession> login({required String email, required String password, String? recaptchaToken}) async {
+  Future<AuthSession> login({required String email, required String password}) async {
     await _lag();
     final key = email.trim().toLowerCase();
     _MockUser? u;
@@ -793,7 +782,6 @@ class MockApiService implements ApiService {
     required String username,
     required String email,
     required String password,
-    String? recaptchaToken,
   }) async {
     await _lag();
     final keyEmail = email.trim().toLowerCase();

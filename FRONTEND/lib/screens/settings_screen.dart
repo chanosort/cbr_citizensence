@@ -114,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text('About CitizenSense', style: TextStyle(fontWeight: FontWeight.w800)),
         ]),
         content: const Text(
-          'Cabadbaran CitizenSense v2.1\n\n'
+          'Cabadbaran CitizenSense\n\n'
           'AI-powered Citizen Complaint & Service Routing System for the City Government of Cabadbaran, Agusan del Norte.\n\n'
           'Powered by Hybrid TF-IDF + Multinomial Naive Bayes & Multilingual NLP (Cebuano, Tagalog, English).',
         ),
@@ -277,7 +277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: 'Privacy & Terms of Use',
                       subtitle: 'How CitizenSense protects your personal data',
                       trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => showTermsDialog(context),
+                      onTap: () => showTermsDialog(context, showAgree: false),
                     ),
 
                     // 6. About System Button
@@ -286,7 +286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.info_outline_rounded,
                       iconColor: AppColors.muted,
                       title: 'About CitizenSense',
-                      subtitle: 'Version info & AI/NLP model details',
+                      subtitle: 'System info & AI/NLP model details',
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: _showAboutDialog,
                     ),

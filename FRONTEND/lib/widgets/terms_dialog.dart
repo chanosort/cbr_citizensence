@@ -87,11 +87,12 @@ const _sections = <(String, String)>[
 ];
 
 /// Returns true when the person taps "I agree".
-Future<bool?> showTermsDialog(BuildContext context) =>
-    showDialog<bool>(context: context, builder: (_) => const _TermsDialog());
+Future<bool?> showTermsDialog(BuildContext context, {bool showAgree = true}) =>
+    showDialog<bool>(context: context, builder: (_) => _TermsDialog(showAgree: showAgree));
 
 class _TermsDialog extends StatelessWidget {
-  const _TermsDialog();
+  const _TermsDialog({this.showAgree = true});
+  final bool showAgree;
 
   @override
   Widget build(BuildContext context) {
@@ -185,14 +186,16 @@ class _TermsDialog extends StatelessWidget {
                     onPressed: () => Navigator.of(context).pop(false),
                     child: const Text('Close'),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 14),
-                      child: Text('I agree'),
+                  if (showAgree) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 14),
+                        child: Text('I agree'),
+                      ),
                     ),
-                  ),
+                  ],
                 ]),
               ],
             ),

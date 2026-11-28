@@ -31,7 +31,6 @@ SMTP_USER = os.getenv('SMTP_USER', '').strip()
 SMTP_PASS = os.getenv('SMTP_PASS', '').replace(' ', '').strip()
 BREVO_API_KEY = os.getenv('BREVO_API_KEY', '').strip()
 APP_EMAIL_FROM = os.getenv('APP_EMAIL_FROM', SMTP_USER).strip()
-RECAPTCHA_SECRET_KEY = os.getenv('RECAPTCHA_SECRET_KEY', '').strip()
 if not JWT_SECRET:
     raise RuntimeError('JWT_SECRET is missing. Set a long random secret in backend/.env.')
 
@@ -678,8 +677,6 @@ class RegisterIn(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_]+$')
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    recaptcha_token: Optional[str] = None
-    platform: Optional[str] = None
     # office_id intentionally omitted — public registration is citizens-only.
 
 class VerifyEmailIn(BaseModel):
@@ -693,8 +690,6 @@ class LoginIn(BaseModel):
     account: Optional[str] = None
     email: Optional[str] = None
     password: str
-    recaptcha_token: Optional[str] = None
-    platform: Optional[str] = None
 
 class ForgotPasswordIn(BaseModel):
     account: Optional[str] = None
@@ -795,51 +790,6 @@ def _validate_password_strength(password: str):
             },
         )
 
-def _verify_recaptcha(token: Optional[str], platform: Optional[str] = None):
-    """Verify Google reCAPTCHA v2 token when RECAPTCHA_SECRET_KEY is configured."""
-    if not RECAPTCHA_SECRET_KEY:
-        return
-    tok = (token or '').strip()
-    if not tok:
-        # Enforce strictly for web clients; mobile native app doesn't embed the web checkbox widget.
-        if (platform or '').lower() == 'web':
-            raise HTTPException(
-                400,
-                detail={
-                    'code': 'RECAPTCHA_REQUIRED',
-                    'message': 'Please complete the reCAPTCHA "I\'m not a robot" verification.',
-                    'details': {},
-                },
-            )
-        return
-    try:
-        import urllib.parse
-        import urllib.request
-        payload = urllib.parse.urlencode({
-            'secret': RECAPTCHA_SECRET_KEY,
-            'response': tok,
-        }).encode('utf-8')
-        req = urllib.request.Request(
-            'https://www.google.com/recaptcha/api/siteverify',
-            data=payload,
-            method='POST',
-        )
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            res = json.loads(resp.read().decode('utf-8'))
-        if not res.get('success'):
-            raise HTTPException(
-                400,
-                detail={
-                    'code': 'RECAPTCHA_FAILED',
-                    'message': 'reCAPTCHA verification failed. Please try again.',
-                    'details': {},
-                },
-            )
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f'[RECAPTCHA WARNING] Could not reach Google reCAPTCHA API: {e}')
-
 @app.post('/api/auth/register')
 def register(data: RegisterIn, db: Session = Depends(get_db)):
     """
@@ -848,7 +798,6 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
     A 6-digit OTP is sent to the supplied email; the account cannot log in
     until it is verified via POST /api/auth/verify-email.
     """
-    _verify_recaptcha(data.recaptcha_token, data.platform)
     _validate_password_strength(data.password)
     username = data.username.lower().strip()
     email = str(data.email).lower().strip()
@@ -944,7 +893,6 @@ def resend_verification(data: ResendVerifyIn, db: Session = Depends(get_db)):
 
 @app.post('/api/auth/login')
 def login(data: LoginIn, db: Session = Depends(get_db)):
-    _verify_recaptcha(data.recaptcha_token, data.platform)
     ident = str(data.account or data.email or '').lower().strip()
     user = db.scalar(select(User).where(
         (func.lower(User.email) == ident) | (func.lower(User.username) == ident)

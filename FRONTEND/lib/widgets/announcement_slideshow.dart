@@ -280,11 +280,6 @@ class _CitizenAnnouncementDialogState extends State<_CitizenAnnouncementDialog> 
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
             ),
           ),
-          IconButton(
-            tooltip: 'Close',
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close_rounded),
-          ),
         ],
       ),
       content: SizedBox(

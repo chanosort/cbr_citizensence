@@ -24,31 +24,13 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="cbr_citizensense">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png?v=3">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png?v=3"/>
 
   <title>Cabadbaran CitizenSense</title>
   <link rel="manifest" href="manifest.json">
-  <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
-  <script>
-    window.renderRecaptcha = function(elId, siteKey) {
-      if (!window.grecaptcha || !window.grecaptcha.render) return -1;
-      return window.grecaptcha.render(elId, {
-        sitekey: siteKey,
-        callback: function(token) {
-          window.postMessage({ type: 'recaptcha-token', elId: elId, token: token }, '*');
-        },
-        'expired-callback': function() {
-          window.postMessage({ type: 'recaptcha-token', elId: elId, token: null }, '*');
-        },
-        'error-callback': function() {
-          window.postMessage({ type: 'recaptcha-token', elId: elId, token: null }, '*');
-        }
-      });
-    };
-  </script>
 </head>
 <body>
   <!--
