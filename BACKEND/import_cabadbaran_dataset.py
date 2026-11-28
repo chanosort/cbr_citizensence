@@ -74,7 +74,7 @@ try:
         print(f"Offices in DB: {offices}")
         
         # Check users in DB to get a valid citizen user_id
-        cur.execute("SELECT id, role, email FROM citizensense_users ORDER BY id LIMIT 5;")
+        cur.execute("SELECT id, role, email FROM citizensense_users_tbl ORDER BY id LIMIT 5;")
         users = cur.fetchall()
         print(f"Users in DB: {users}")
         default_user_id = users[0][0] if users else 1

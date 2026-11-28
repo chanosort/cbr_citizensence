@@ -70,7 +70,7 @@ class Base(DeclarativeBase): pass
 
 
 class User(Base):
-    __tablename__ = 'citizensense_users'
+    __tablename__ = 'citizensense_users_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(160))
     username: Mapped[Optional[str]] = mapped_column(String(50), unique=True, index=True, nullable=True)
@@ -116,7 +116,7 @@ class ComplaintRow(Base):
 # Stores OTP codes for email verification and password reset.
 # Each row is single-use and expires after OTP_TTL_MINUTES.
 class OtpToken(Base):
-    __tablename__ = 'citizensense_otp_tokens'
+    __tablename__ = 'citizensense_otp_tokens_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(254), index=True)
     # purpose: 'verify_email' | 'reset_password'
@@ -130,7 +130,7 @@ class OtpToken(Base):
 # Stores in-app notifications per user.
 # type: 'new_complaint' | 'status_update'
 class Notification(Base):
-    __tablename__ = 'citizensense_notifications'
+    __tablename__ = 'citizensense_notifications_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     # recipient user id
     user_id: Mapped[int] = mapped_column(Integer, index=True)
@@ -142,7 +142,7 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 class ComplaintMessage(Base):
-    __tablename__ = 'citizensense_complaint_messages'
+    __tablename__ = 'citizensense_complaint_messages_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     complaint_id: Mapped[int] = mapped_column(Integer, index=True)
     sender_id: Mapped[int] = mapped_column(Integer)
@@ -152,7 +152,7 @@ class ComplaintMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 class ActivityLog(Base):
-    __tablename__ = 'citizensense_activity_logs'
+    __tablename__ = 'citizensense_activity_logs_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     actor_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     actor_name: Mapped[str] = mapped_column(String(160))
@@ -164,7 +164,7 @@ class ActivityLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 class Announcement(Base):
-    __tablename__ = 'citizensense_announcements'
+    __tablename__ = 'citizensense_announcements_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text)
@@ -178,7 +178,7 @@ class Announcement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 class LoginAttempt(Base):
-    __tablename__ = 'citizensense_login_attempts'
+    __tablename__ = 'citizensense_login_attempts_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     ip_address: Mapped[str] = mapped_column(String(64), index=True)
     account: Mapped[Optional[str]] = mapped_column(String(254), nullable=True)
@@ -186,13 +186,39 @@ class LoginAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 class SecurityQuestion(Base):
-    __tablename__ = 'citizensense_security_questions'
+    __tablename__ = 'citizensense_security_questions_tbl'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     question: Mapped[str] = mapped_column(String(512))
     answer_hash: Mapped[str] = mapped_column(String(256))
     position: Mapped[int] = mapped_column(Integer, default=1)
 
+def _rename_tables_to_tbl(db_engine):
+    """Rename legacy tables without _tbl suffix so every table ends with _tbl."""
+    from sqlalchemy import text, inspect
+    renames = [
+        ('citizensense_users', 'citizensense_users_tbl'),
+        ('citizensense_otp_tokens', 'citizensense_otp_tokens_tbl'),
+        ('citizensense_notifications', 'citizensense_notifications_tbl'),
+        ('citizensense_complaint_messages', 'citizensense_complaint_messages_tbl'),
+        ('citizensense_activity_logs', 'citizensense_activity_logs_tbl'),
+        ('citizensense_announcements', 'citizensense_announcements_tbl'),
+        ('citizensense_login_attempts', 'citizensense_login_attempts_tbl'),
+        ('citizensense_security_questions', 'citizensense_security_questions_tbl'),
+    ]
+    try:
+        existing = set(inspect(db_engine).get_table_names())
+        for old_name, new_name in renames:
+            if old_name in existing and new_name not in existing:
+                try:
+                    with db_engine.begin() as conn:
+                        conn.execute(text(f'ALTER TABLE "{old_name}" RENAME TO "{new_name}"'))
+                except Exception as e:
+                    print(f'Table rename note ({old_name} -> {new_name}): {e}')
+    except Exception as e:
+        print(f'Table inspect note: {e}')
+
+_rename_tables_to_tbl(engine)
 Base.metadata.create_all(bind=engine)
 
 def _run_migrations(db_engine):
@@ -213,11 +239,11 @@ def _run_migrations(db_engine):
                 ('feedback_at', 'TIMESTAMP'),
             ]
         ] + [
-            'ALTER TABLE citizensense_users ADD COLUMN avatar_url VARCHAR(255)',
-            'ALTER TABLE citizensense_users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0',
-            'ALTER TABLE citizensense_users ADD COLUMN locked_until TIMESTAMP',
-            'ALTER TABLE citizensense_users ADD COLUMN last_active_at TIMESTAMP',
-            'ALTER TABLE citizensense_security_questions ALTER COLUMN question TYPE VARCHAR(512)',
+            'ALTER TABLE citizensense_users_tbl ADD COLUMN avatar_url VARCHAR(255)',
+            'ALTER TABLE citizensense_users_tbl ADD COLUMN failed_login_attempts INTEGER DEFAULT 0',
+            'ALTER TABLE citizensense_users_tbl ADD COLUMN locked_until TIMESTAMP',
+            'ALTER TABLE citizensense_users_tbl ADD COLUMN last_active_at TIMESTAMP',
+            'ALTER TABLE citizensense_security_questions_tbl ALTER COLUMN question TYPE VARCHAR(512)',
         ]
         for stmt in alters:
             try:
