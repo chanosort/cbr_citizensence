@@ -41,6 +41,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String _q2 = _kSecurityQuestions[1];
   String _q3 = _kSecurityQuestions[2];
   late final TapGestureRecognizer _termsTap;
+  int _step = 0; // 0 = Account details, 1 = Security questions & terms
   bool _obscure = true;
   bool _agreed = false;
   bool _termsError = false;
@@ -76,6 +77,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _termsError = false;
       });
     }
+  }
+
+  void _nextStep() {
+    if (!_form.currentState!.validate()) return;
+    context.read<AuthProvider>().clearError();
+    setState(() => _step = 1);
   }
 
   Future<void> _submit() async {
@@ -115,149 +122,193 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Text('Create your account',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          const Text(
-            'Register with your email to submit complaints. '
-            'Staff and admin accounts are set up by administrators.',
-            style: TextStyle(color: AppColors.muted),
+          Text(
+            _step == 0
+                ? 'Step 1 of 2 — Account details. Staff and admin accounts are set up by administrators.'
+                : 'Step 2 of 2 — Choose 3 unique security questions for account recovery.',
+            style: const TextStyle(color: AppColors.muted),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: Container(
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.navy,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _step == 1 ? AppColors.navy : AppColors.line,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 20),
           if (auth.error != null) ...[
             MessageBanner(message: auth.error!),
             const SizedBox(height: 16),
           ],
-          TextFormField(
-            controller: _name,
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.name],
-            decoration: const InputDecoration(labelText: 'Full name'),
-            validator: (v) => (v ?? '').trim().length < 2 ? 'Enter your full name.' : null,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _username,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.username],
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              helperText: 'For login and account recovery (letters, numbers, underscores).',
+          if (_step == 0) ...[
+            TextFormField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.name],
+              decoration: const InputDecoration(labelText: 'Full name'),
+              validator: (v) => (v ?? '').trim().length < 2 ? 'Enter your full name.' : null,
             ),
-            validator: validateUsername,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(
-              labelText: 'Email address',
-              helperText: 'A verification code will be sent to this email.',
-            ),
-            validator: validateRegisterEmail,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _password,
-            obscureText: _obscure,
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              labelText: 'Password',
-              helperText: kPasswordRuleHint,
-              helperMaxLines: 2,
-              suffixIcon: IconButton(
-                tooltip: _obscure ? 'Show password' : 'Hide password',
-                icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                onPressed: () => setState(() => _obscure = !_obscure),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _username,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.username],
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                helperText: 'For login and account recovery (letters, numbers, underscores).',
               ),
+              validator: validateUsername,
             ),
-            validator: (v) => validatePassword(v, strict: true),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _confirm,
-            obscureText: _obscure,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Confirm password'),
-            validator: (v) => v != _password.text ? 'Passwords do not match.' : null,
-          ),
-          const SizedBox(height: 20),
-          Text('Security Questions',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          const Text(
-            'Choose 3 different questions and provide your answers for account recovery.',
-            style: TextStyle(color: AppColors.muted, fontSize: 12.5),
-          ),
-          const SizedBox(height: 12),
-          _buildQuestionPicker(
-            label: 'Security Question 1',
-            value: _q1,
-            others: {_q2, _q3},
-            onChanged: (v) => setState(() => _q1 = v!),
-            answerController: _ans1,
-            answerAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 12),
-          _buildQuestionPicker(
-            label: 'Security Question 2',
-            value: _q2,
-            others: {_q1, _q3},
-            onChanged: (v) => setState(() => _q2 = v!),
-            answerController: _ans2,
-            answerAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 12),
-          _buildQuestionPicker(
-            label: 'Security Question 3',
-            value: _q3,
-            others: {_q1, _q2},
-            onChanged: (v) => setState(() => _q3 = v!),
-            answerController: _ans3,
-            answerAction: TextInputAction.done,
-          ),
-          const SizedBox(height: 14),
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Checkbox(
-              value: _agreed,
-              onChanged: (v) => setState(() {
-                _agreed = v ?? false;
-                if (_agreed) _termsError = false;
-              }),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text.rich(TextSpan(style: const TextStyle(height: 1.4), children: [
-                  const TextSpan(text: 'I have read and agree to the '),
-                  TextSpan(
-                    text: 'Terms of Use and Data Privacy Notice',
-                    recognizer: _termsTap,
-                    style: const TextStyle(
-                        color: AppColors.navy,
-                        fontWeight: FontWeight.w700,
-                        decoration: TextDecoration.underline),
-                  ),
-                  const TextSpan(text: '.'),
-                ])),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(
+                labelText: 'Email address',
+                helperText: 'A verification code will be sent to this email.',
               ),
+              validator: validateRegisterEmail,
             ),
-          ]),
-          if (_termsError)
-            const Padding(
-              padding: EdgeInsets.only(left: 12, bottom: 4),
-              child: Text('You need to agree before creating an account.',
-                  style: TextStyle(color: AppColors.star, fontSize: 12.5)),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _password,
+              obscureText: _obscure,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                helperText: kPasswordRuleHint,
+                helperMaxLines: 2,
+                suffixIcon: IconButton(
+                  tooltip: _obscure ? 'Show password' : 'Hide password',
+                  icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              validator: (v) => validatePassword(v, strict: true),
             ),
-          const SizedBox(height: 14),
-          ElevatedButton(
-            onPressed: auth.busy ? null : _submit,
-            child: auth.busy
-                ? const SizedBox(
-                    width: 22, height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : const Text('Create account'),
-          ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _confirm,
+              obscureText: _obscure,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _nextStep(),
+              decoration: const InputDecoration(labelText: 'Confirm password'),
+              validator: (v) => v != _password.text ? 'Passwords do not match.' : null,
+            ),
+            const SizedBox(height: 22),
+            ElevatedButton(
+              onPressed: _nextStep,
+              child: const Text('Next'),
+            ),
+          ] else ...[
+            Text('Security Questions',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            const Text(
+              'Choose 3 different questions and provide your answers for account recovery.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+            ),
+            const SizedBox(height: 12),
+            _buildQuestionPicker(
+              label: 'Security Question 1',
+              value: _q1,
+              others: {_q2, _q3},
+              onChanged: (v) => setState(() => _q1 = v!),
+              answerController: _ans1,
+              answerAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+            _buildQuestionPicker(
+              label: 'Security Question 2',
+              value: _q2,
+              others: {_q1, _q3},
+              onChanged: (v) => setState(() => _q2 = v!),
+              answerController: _ans2,
+              answerAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+            _buildQuestionPicker(
+              label: 'Security Question 3',
+              value: _q3,
+              others: {_q1, _q2},
+              onChanged: (v) => setState(() => _q3 = v!),
+              answerController: _ans3,
+              answerAction: TextInputAction.done,
+            ),
+            const SizedBox(height: 14),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Checkbox(
+                value: _agreed,
+                onChanged: (v) => setState(() {
+                  _agreed = v ?? false;
+                  if (_agreed) _termsError = false;
+                }),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text.rich(TextSpan(style: const TextStyle(height: 1.4), children: [
+                    const TextSpan(text: 'I have read and agree to the '),
+                    TextSpan(
+                      text: 'Terms of Use and Data Privacy Notice',
+                      recognizer: _termsTap,
+                      style: const TextStyle(
+                          color: AppColors.navy,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline),
+                    ),
+                    const TextSpan(text: '.'),
+                  ])),
+                ),
+              ),
+            ]),
+            if (_termsError)
+              const Padding(
+                padding: EdgeInsets.only(left: 12, bottom: 4),
+                child: Text('You need to agree before creating an account.',
+                    style: TextStyle(color: AppColors.star, fontSize: 12.5)),
+              ),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(
+                flex: 2,
+                child: OutlinedButton(
+                  onPressed: auth.busy ? null : () => setState(() => _step = 0),
+                  child: const Text('Back'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 3,
+                child: ElevatedButton(
+                  onPressed: auth.busy ? null : _submit,
+                  child: auth.busy
+                      ? const SizedBox(
+                          width: 22, height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                      : const Text('Create account'),
+                ),
+              ),
+            ]),
+          ],
           const SizedBox(height: 18),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             const Text('Already registered?', style: TextStyle(color: AppColors.muted)),
@@ -276,12 +327,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required TextEditingController answerController,
     required TextInputAction answerAction,
   }) {
+    final available = _kSecurityQuestions
+        .where((q) => q == value || !others.contains(q))
+        .toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       DropdownButtonFormField<String>(
         initialValue: value,
         isExpanded: true,
         decoration: InputDecoration(labelText: label),
-        items: _kSecurityQuestions
+        items: available
             .map((q) => DropdownMenuItem<String>(
                   value: q,
                   child: Text(q, overflow: TextOverflow.ellipsis),
