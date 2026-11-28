@@ -1643,7 +1643,7 @@ def export_my_complaints_csv(
     elif user.role == 'staff':
         user_oid = str(user.office_id)
         q = q.where((ComplaintRow.office_id == user.office_id) | (ComplaintRow.co_office_ids.like(f'%{user_oid}%')))
-    rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc()).limit(2030)))
+    rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc())))
 
     output = io.StringIO()
     w = csv_mod.writer(output)
@@ -1842,7 +1842,7 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
         q = select(ComplaintRow)
         if user.role == 'citizen': q = q.where(ComplaintRow.citizen_id == user.id)
         elif user.role == 'staff': q = q.where(ComplaintRow.office_id == user.office_id)
-        rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc()).limit(2030)))
+        rows = list(db.scalars(q.order_by(ComplaintRow.created_at.desc())))
         pending = sum(c.status in ('submitted', 'received') for c in rows)
         progress = sum(c.status == 'in_progress' for c in rows)
         solved = sum(c.status in ('resolved', 'closed') for c in rows)
