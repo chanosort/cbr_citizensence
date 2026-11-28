@@ -189,7 +189,7 @@ class SecurityQuestion(Base):
     __tablename__ = 'citizensense_security_questions'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
-    question: Mapped[str] = mapped_column(String(255))
+    question: Mapped[str] = mapped_column(String(512))
     answer_hash: Mapped[str] = mapped_column(String(256))
     position: Mapped[int] = mapped_column(Integer, default=1)
 
@@ -217,6 +217,7 @@ def _run_migrations(db_engine):
             'ALTER TABLE citizensense_users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0',
             'ALTER TABLE citizensense_users ADD COLUMN locked_until TIMESTAMP',
             'ALTER TABLE citizensense_users ADD COLUMN last_active_at TIMESTAMP',
+            'ALTER TABLE citizensense_security_questions ALTER COLUMN question TYPE VARCHAR(512)',
         ]
         for stmt in alters:
             try:
@@ -371,6 +372,46 @@ def _hash_answer(answer: str) -> str:
 
 def _verify_answer(answer: str, stored_hash: str) -> bool:
     return verify_password(_normalize_answer(answer), stored_hash)
+
+def _encryption_keys() -> tuple[bytes, bytes]:
+    secret = (os.getenv('DATA_ENCRYPTION_KEY', '').strip() or JWT_SECRET).encode('utf-8')
+    enc_key = hashlib.sha256(b'citizensense-enc:' + secret).digest()
+    mac_key = hashlib.sha256(b'citizensense-mac:' + secret).digest()
+    return enc_key, mac_key
+
+def _keystream(enc_key: bytes, nonce: bytes, length: int) -> bytes:
+    out = bytearray()
+    counter = 0
+    while len(out) < length:
+        out.extend(hashlib.sha256(enc_key + nonce + counter.to_bytes(4, 'big')).digest())
+        counter += 1
+    return bytes(out[:length])
+
+def _encrypt_text(plaintext: str) -> str:
+    """Encrypt sensitive text (e.g. security questions) with authenticated encryption."""
+    raw = plaintext.encode('utf-8')
+    enc_key, mac_key = _encryption_keys()
+    nonce = secrets.token_bytes(16)
+    stream = _keystream(enc_key, nonce, len(raw))
+    ciphertext = bytes(a ^ b for a, b in zip(raw, stream))
+    tag = hmac.new(mac_key, nonce + ciphertext, hashlib.sha256).digest()
+    return 'enc:v1:' + base64.urlsafe_b64encode(nonce + tag + ciphertext).decode('ascii')
+
+def _decrypt_text(stored: str) -> str:
+    """Decrypt enc:v1: text; returns plaintext as-is for legacy unencrypted rows."""
+    if not stored.startswith('enc:v1:'):
+        return stored
+    try:
+        blob = base64.urlsafe_b64decode(stored[7:].encode('ascii'))
+        nonce, tag, ciphertext = blob[:16], blob[16:48], blob[48:]
+        enc_key, mac_key = _encryption_keys()
+        expected = hmac.new(mac_key, nonce + ciphertext, hashlib.sha256).digest()
+        if not hmac.compare_digest(tag, expected):
+            return ''
+        stream = _keystream(enc_key, nonce, len(ciphertext))
+        return bytes(a ^ b for a, b in zip(ciphertext, stream)).decode('utf-8')
+    except Exception:
+        return ''
 
 def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
@@ -905,7 +946,7 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
     for idx, sq in enumerate(data.security_questions, start=1):
         db.add(SecurityQuestion(
             user_id=user.id,
-            question=sq.question.strip(),
+            question=_encrypt_text(sq.question.strip()),
             answer_hash=_hash_answer(sq.answer),
             position=idx,
         ))
@@ -1082,7 +1123,7 @@ def forgot_password_questions(data: ForgotQuestionsIn, db: Session = Depends(get
         raise HTTPException(400, detail={'code': 'NO_SECURITY_QUESTIONS', 'message': 'This account has no security questions configured.', 'details': {}})
     return ok({
         'email': _mask_email(user.email),
-        'questions': [{'id': q.id, 'question': q.question} for q in qs],
+        'questions': [{'id': q.id, 'question': _decrypt_text(q.question)} for q in qs],
     })
 
 @app.post('/api/auth/forgot-password')
